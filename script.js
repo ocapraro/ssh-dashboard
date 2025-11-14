@@ -5,17 +5,19 @@ class SSHDashboard {
         this.connections = [];
         this.logs = [];
         this.alerts = [];
+        this.apiBaseUrl = 'http://localhost:3001/api';
         this.settings = {
             autoRefresh: true,
             refreshInterval: 30,
             maxLogs: 1000,
             desktopNotifications: true,
             soundAlerts: true,
-            emailAlerts: false
+            emailAlerts: false,
+            useRealAPI: true // Toggle between real API and mock data
         };
         
         this.init();
-        this.loadSampleData();
+        this.loadData();
         this.startAutoRefresh();
     }
 
@@ -61,6 +63,17 @@ class SSHDashboard {
             this.startAutoRefresh();
         });
 
+        document.getElementById('use-real-api').addEventListener('change', (e) => {
+            this.settings.useRealAPI = e.target.checked;
+            this.saveSettings();
+            this.loadData(); // Reload data with new setting
+        });
+
+        document.getElementById('backend-url').addEventListener('change', (e) => {
+            this.apiBaseUrl = e.target.value;
+            this.saveSettings();
+        });
+
         // Log controls
         document.getElementById('log-level').addEventListener('change', (e) => this.filterLogs(e.target.value));
         document.getElementById('clear-logs-btn').addEventListener('click', () => this.clearLogs());
@@ -103,12 +116,110 @@ class SSHDashboard {
         }
     }
 
+    async loadData() {
+        if (this.settings.useRealAPI) {
+            await this.loadRealData();
+        } else {
+            this.loadSampleData();
+        }
+    }
+
+    async loadRealData() {
+        try {
+            // Load devices from backend
+            const response = await fetch(`${this.apiBaseUrl}/devices`);
+            if (response.ok) {
+                const result = await response.json();
+                this.devices = result.data.map(device => ({
+                    ...device,
+                    // Add default values for properties expected by frontend
+                    port: device.port || 22,
+                    cpu: Math.floor(Math.random() * 50) + 10, // Mock CPU data
+                    memory: Math.floor(Math.random() * 60) + 20 // Mock memory data
+                }));
+                
+                this.addLog('info', `Loaded ${this.devices.length} devices from backend`);
+            } else {
+                throw new Error(`Backend not available (${response.status})`);
+            }
+        } catch (error) {
+            this.addLog('error', `Failed to connect to backend: ${error.message}`);
+            this.showNotification('Backend Error', 'Using mock data - backend not available', 'warning');
+            this.loadSampleData();
+            return;
+        }
+
+        // Generate mock connections based on real devices
+        this.generateMockConnections();
+
+        // Initialize alerts
+        this.alerts = [];
+        this.generateAlertsFromDevices();
+
+        this.updateOverview();
+        this.renderDevices();
+        this.renderConnections();
+        this.renderLogs();
+    }
+
+    generateMockConnections() {
+        this.connections = [];
+        const onlineDevices = this.devices.filter(d => d.status === 'online');
+        
+        // Create mock SSH connections for online devices
+        onlineDevices.slice(0, 3).forEach((device, index) => {
+            this.connections.push({
+                id: index + 1,
+                deviceId: device.id,
+                deviceName: device.name,
+                user: ['admin', 'root', 'developer'][index] || 'admin',
+                ip: `192.168.1.${100 + index}`,
+                connectedSince: new Date(Date.now() - (Math.random() * 7200000)),
+                status: Math.random() > 0.3 ? 'active' : 'idle',
+                sessionId: `ssh-${Date.now()}-${index}`
+            });
+        });
+    }
+
+    generateAlertsFromDevices() {
+        this.devices.forEach(device => {
+            if (device.status === 'offline') {
+                this.alerts.push({
+                    id: Date.now() + Math.random(),
+                    type: 'error',
+                    message: `Device ${device.name} is offline`,
+                    time: new Date(Date.now() - Math.random() * 3600000),
+                    device: device.name
+                });
+            } else if (device.status === 'warning') {
+                this.alerts.push({
+                    id: Date.now() + Math.random(),
+                    type: 'warning',
+                    message: `Device ${device.name} showing warnings`,
+                    time: new Date(Date.now() - Math.random() * 1800000),
+                    device: device.name
+                });
+            }
+        });
+
+        // Add some general alerts
+        if (this.devices.some(d => d.stats && d.stats.failedLogins > 0)) {
+            this.alerts.push({
+                id: Date.now() + Math.random(),
+                type: 'warning',
+                message: 'Multiple failed login attempts detected',
+                time: new Date(Date.now() - Math.random() * 900000),
+                device: 'System'
+            });
+        }
+    }
+
     loadSampleData() {
-        // Sample devices
+        // Sample devices (fallback when backend is not available)
         this.devices = [
             {
-                id: 1,
-                name: 'Web Server 01',
+                id: 'web-server-sample',
+                name: 'Web Server 01 (Sample)',
                 ip: '192.168.1.10',
                 port: 22,
                 type: 'server',
@@ -116,11 +227,12 @@ class SSHDashboard {
                 lastSeen: new Date(),
                 cpu: 45,
                 memory: 78,
-                uptime: '15d 8h 32m'
+                uptime: '15d 8h 32m',
+                stats: { errorCount: 5, warningCount: 2, sshConnections: 25, failedLogins: 1 }
             },
             {
-                id: 2,
-                name: 'Database Server',
+                id: 'database-server-sample',
+                name: 'Database Server (Sample)',
                 ip: '192.168.1.15',
                 port: 22,
                 type: 'server',
@@ -128,11 +240,12 @@ class SSHDashboard {
                 lastSeen: new Date(Date.now() - 300000),
                 cpu: 23,
                 memory: 65,
-                uptime: '32d 12h 15m'
+                uptime: '32d 12h 15m',
+                stats: { errorCount: 2, warningCount: 1, sshConnections: 15, failedLogins: 0 }
             },
             {
-                id: 3,
-                name: 'Main Router',
+                id: 'main-router-sample',
+                name: 'Main Router (Sample)',
                 ip: '192.168.1.1',
                 port: 22,
                 type: 'router',
@@ -140,43 +253,8 @@ class SSHDashboard {
                 lastSeen: new Date(Date.now() - 900000),
                 cpu: 12,
                 memory: 34,
-                uptime: '45d 3h 22m'
-            },
-            {
-                id: 4,
-                name: 'Backup Server',
-                ip: '192.168.1.20',
-                port: 22,
-                type: 'server',
-                status: 'offline',
-                lastSeen: new Date(Date.now() - 3600000),
-                cpu: 0,
-                memory: 0,
-                uptime: 'Offline'
-            },
-            {
-                id: 5,
-                name: 'Firewall',
-                ip: '192.168.1.254',
-                port: 22,
-                type: 'firewall',
-                status: 'online',
-                lastSeen: new Date(),
-                cpu: 8,
-                memory: 25,
-                uptime: '89d 15h 45m'
-            },
-            {
-                id: 6,
-                name: 'Switch 01',
-                ip: '192.168.1.2',
-                port: 22,
-                type: 'switch',
-                status: 'online',
-                lastSeen: new Date(Date.now() - 120000),
-                cpu: 15,
-                memory: 42,
-                uptime: '12d 6h 18m'
+                uptime: '45d 3h 22m',
+                stats: { errorCount: 8, warningCount: 5, sshConnections: 8, failedLogins: 2 }
             }
         ];
 
@@ -184,65 +262,28 @@ class SSHDashboard {
         this.connections = [
             {
                 id: 1,
-                deviceId: 1,
-                deviceName: 'Web Server 01',
+                deviceId: 'web-server-sample',
+                deviceName: 'Web Server 01 (Sample)',
                 user: 'admin',
                 ip: '192.168.1.100',
                 connectedSince: new Date(Date.now() - 7200000),
                 status: 'active',
-                sessionId: 'ssh-001'
-            },
-            {
-                id: 2,
-                deviceId: 2,
-                deviceName: 'Database Server',
-                user: 'dbadmin',
-                ip: '192.168.1.101',
-                connectedSince: new Date(Date.now() - 3600000),
-                status: 'active',
-                sessionId: 'ssh-002'
-            },
-            {
-                id: 3,
-                deviceId: 1,
-                deviceName: 'Web Server 01',
-                user: 'developer',
-                ip: '192.168.1.102',
-                connectedSince: new Date(Date.now() - 1800000),
-                status: 'idle',
-                sessionId: 'ssh-003'
+                sessionId: 'ssh-001-sample'
             }
         ];
 
         // Sample logs
         this.addLog('info', 'SSH Dashboard started successfully');
-        this.addLog('info', 'Loaded 6 devices from configuration');
-        this.addLog('warning', 'Device Main Router (192.168.1.1) showing high response time');
-        this.addLog('info', 'New SSH connection established: admin@192.168.1.100 -> Web Server 01');
-        this.addLog('error', 'Failed SSH attempt from 203.0.113.42');
-        this.addLog('info', 'Database backup completed successfully');
+        this.addLog('warning', 'Backend not available - using sample data');
+        this.addLog('info', 'Loaded 3 sample devices');
 
         // Sample alerts
         this.alerts = [
             {
                 id: 1,
                 type: 'warning',
-                message: 'High CPU usage on Web Server 01',
-                time: new Date(Date.now() - 600000),
-                device: 'Web Server 01'
-            },
-            {
-                id: 2,
-                type: 'error',
-                message: 'Backup Server is offline',
-                time: new Date(Date.now() - 3600000),
-                device: 'Backup Server'
-            },
-            {
-                id: 3,
-                type: 'info',
-                message: 'System maintenance scheduled for tonight',
-                time: new Date(Date.now() - 7200000),
+                message: 'Backend API not available - using sample data',
+                time: new Date(),
                 device: 'System'
             }
         ];
@@ -308,36 +349,92 @@ class SSHDashboard {
     renderDevices() {
         const container = document.getElementById('devices-grid');
         
-        container.innerHTML = this.devices.map(device => `
-            <div class="device-card" data-device-id="${device.id}">
-                <div class="device-header">
-                    <div class="device-info">
-                        <div class="device-name">${device.name}</div>
-                        <div class="device-ip">${device.ip}:${device.port}</div>
+        container.innerHTML = this.devices.map(device => {
+            const deviceId = JSON.stringify(device.id); // Safely stringify for onclick
+            const stats = device.stats || {};
+            
+            return `
+                <div class="device-card" data-device-id="${device.id}">
+                    <div class="device-header">
+                        <div class="device-info">
+                            <div class="device-name">${device.name}</div>
+                            <div class="device-ip">${device.ip}:${device.port || 22}</div>
+                        </div>
+                        <div class="device-status ${device.status}">${device.status}</div>
                     </div>
-                    <div class="device-status ${device.status}">${device.status}</div>
+                    <div class="device-details">
+                        <div>Type: ${device.type}</div>
+                        <div>Last Seen: ${device.lastSeen ? this.formatTime(new Date(device.lastSeen)) : 'Never'}</div>
+                    </div>
+                    ${device.cpu !== undefined ? `
+                    <div class="device-details">
+                        <div>CPU: ${device.cpu}%</div>
+                        <div>Memory: ${device.memory}%</div>
+                    </div>
+                    ` : ''}
+                    ${Object.keys(stats).length > 0 ? `
+                    <div class="device-details">
+                        <div>SSH: ${stats.sshConnections || 0}</div>
+                        <div>Errors: ${stats.errorCount || 0}</div>
+                    </div>
+                    <div class="device-details">
+                        <div>Warnings: ${stats.warningCount || 0}</div>
+                        <div>Failed Logins: ${stats.failedLogins || 0}</div>
+                    </div>
+                    ` : ''}
+                    <div class="device-actions">
+                        <button class="btn btn-sm btn-primary" onclick="dashboard.connectToDevice(${deviceId})">
+                            <i class="fas fa-terminal"></i> Connect
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="dashboard.viewDeviceLogs(${deviceId})">
+                            <i class="fas fa-file-alt"></i> Logs
+                        </button>
+                        <button class="btn btn-sm btn-secondary" onclick="dashboard.pingDevice(${deviceId})">
+                            <i class="fas fa-heartbeat"></i> Ping
+                        </button>
+                    </div>
                 </div>
-                <div class="device-details">
-                    <div>Type: ${device.type}</div>
-                    <div>Uptime: ${device.uptime}</div>
-                </div>
-                <div class="device-details">
-                    <div>CPU: ${device.cpu}%</div>
-                    <div>Memory: ${device.memory}%</div>
-                </div>
-                <div class="device-actions">
-                    <button class="btn btn-sm btn-primary" onclick="dashboard.connectToDevice(${device.id})">
-                        <i class="fas fa-terminal"></i> Connect
-                    </button>
-                    <button class="btn btn-sm btn-secondary" onclick="dashboard.pingDevice(${device.id})">
-                        <i class="fas fa-heartbeat"></i> Ping
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="dashboard.removeDevice(${device.id})">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
+    }
+
+    async viewDeviceLogs(deviceId) {
+        if (!this.settings.useRealAPI) {
+            this.showNotification('Feature Unavailable', 'Log viewing requires backend API', 'warning');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/devices/${deviceId}/logs?lines=50`);
+            if (response.ok) {
+                const result = await response.json();
+                const device = this.devices.find(d => d.id === deviceId);
+                
+                // Display logs in a modal or switch to logs section
+                this.displayDeviceLogs(device, result.data);
+            } else {
+                throw new Error('Failed to fetch device logs');
+            }
+        } catch (error) {
+            this.addLog('error', `Failed to load logs for device ${deviceId}: ${error.message}`);
+            this.showNotification('Error', 'Failed to load device logs', 'error');
+        }
+    }
+
+    displayDeviceLogs(device, logs) {
+        // For now, add logs to the main log viewer and switch to logs section
+        logs.forEach(log => {
+            this.logs.unshift({
+                id: Date.now() + Math.random(),
+                level: log.level,
+                message: `[${device.name}] ${log.message}`,
+                time: new Date(log.timestamp)
+            });
+        });
+
+        // Switch to logs section
+        this.showSection('logs');
+        this.showNotification('Device Logs Loaded', `Loaded ${logs.length} log entries for ${device.name}`);
     }
 
     renderConnections() {
@@ -575,23 +672,42 @@ class SSHDashboard {
         }
     }
 
-    refreshData() {
+    async refreshData() {
         this.addLog('info', 'Manual refresh triggered');
         
-        // Simulate data refresh
-        this.devices.forEach(device => {
-            if (device.status === 'online') {
-                device.cpu = Math.max(0, Math.min(100, device.cpu + (Math.random() - 0.5) * 10));
-                device.memory = Math.max(0, Math.min(100, device.memory + (Math.random() - 0.5) * 5));
-                device.lastSeen = new Date();
+        if (this.settings.useRealAPI) {
+            try {
+                // Trigger backend refresh
+                const response = await fetch(`${this.apiBaseUrl}/devices/refresh`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    await this.loadRealData();
+                    this.showNotification('Data Refreshed', 'Dashboard data updated from backend');
+                } else {
+                    throw new Error('Backend refresh failed');
+                }
+            } catch (error) {
+                this.addLog('error', `Refresh failed: ${error.message}`);
+                this.showNotification('Refresh Failed', 'Could not refresh from backend', 'error');
             }
-        });
+        } else {
+            // Simulate data refresh for sample data
+            this.devices.forEach(device => {
+                if (device.status === 'online') {
+                    device.cpu = Math.max(0, Math.min(100, device.cpu + (Math.random() - 0.5) * 10));
+                    device.memory = Math.max(0, Math.min(100, device.memory + (Math.random() - 0.5) * 5));
+                    device.lastSeen = new Date();
+                }
+            });
+            
+            this.showNotification('Data Refreshed', 'Sample data has been updated');
+        }
         
         // Update current view
         const activeSection = document.querySelector('.content-section.active').id;
         this.showSection(activeSection);
-        
-        this.showNotification('Data Refreshed', 'Dashboard data has been updated');
     }
 
     startAutoRefresh() {
@@ -637,6 +753,8 @@ class SSHDashboard {
         document.getElementById('desktop-notifications').checked = this.settings.desktopNotifications;
         document.getElementById('sound-alerts').checked = this.settings.soundAlerts;
         document.getElementById('email-alerts').checked = this.settings.emailAlerts;
+        document.getElementById('use-real-api').checked = this.settings.useRealAPI;
+        document.getElementById('backend-url').value = this.apiBaseUrl;
     }
 
     saveSettings() {

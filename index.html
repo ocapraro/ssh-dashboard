@@ -288,6 +288,20 @@
                                 </label>
                             </div>
                         </div>
+                        <div class="settings-group">
+                            <h3>Data Source</h3>
+                            <div class="setting-item">
+                                <label>
+                                    <input type="checkbox" id="use-real-api" checked>
+                                    Use Real Backend API
+                                </label>
+                                <small style="color: var(--text-secondary); font-size: 0.75rem;">Uncheck to use sample data when backend is unavailable</small>
+                            </div>
+                            <div class="setting-item">
+                                <label for="backend-url">Backend API URL:</label>
+                                <input type="text" id="backend-url" value="http://localhost:3001/api">
+                            </div>
+                        </div>
                     </div>
                 </section>
             </div>
