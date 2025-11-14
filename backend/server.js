@@ -217,7 +217,7 @@ class DeviceScanner {
                                     sourceIP,
                                     port: parseInt(port),
                                     terminal,
-                                    startTime: this.extractTimestamp(line),
+                                    startTime: extractTimestamp(line),
                                     status: 'active',
                                     device: device.id
                                 });
@@ -232,7 +232,7 @@ class DeviceScanner {
                                 
                                 if (sessions.has(sessionKey)) {
                                     const session = sessions.get(sessionKey);
-                                    session.endTime = this.extractTimestamp(line);
+                                    session.endTime = extractTimestamp(line);
                                     session.status = 'closed';
                                 }
                             }
@@ -288,44 +288,7 @@ class DeviceScanner {
         return match ? match[1] : 'unknown';
     }
 
-    extractTimestamp(logLine) {
-        // Try to extract timestamp from common log formats
-        const patterns = [
-            /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})/,  // ISO format with timezone: 2025-11-13T20:18:29-05:00
-            /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/,                 // ISO format: 2025-11-13T20:18:29
-            /^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/,                // MMM DD HH:mm:ss
-            /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/,              // YYYY-MM-DD HH:mm:ss
-            /(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/,                 // MMM DD HH:mm:ss anywhere in line
-        ];
-        
-        for (const pattern of patterns) {
-            const match = logLine.match(pattern);
-            if (match) {
-                const timeStr = match[1];
-                
-                // Handle ISO format with timezone
-                if (timeStr.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}/)) {
-                    return new Date(timeStr);
-                }
-                
-                // Handle ISO format without timezone
-                if (timeStr.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
-                    return new Date(timeStr);
-                }
-                
-                // Add current year if not present for syslog format
-                if (timeStr.match(/^\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}$/)) {
-                    const currentYear = new Date().getFullYear();
-                    return moment(`${currentYear} ${timeStr}`, 'YYYY MMM DD HH:mm:ss').toDate();
-                }
-                
-                // Handle standard date format
-                return moment(timeStr, 'YYYY-MM-DD HH:mm:ss').toDate();
-            }
-        }
-        
-        return new Date(); // Fallback to current time
-    }
+
 
 
 
@@ -540,13 +503,13 @@ app.get('/api/devices/:deviceId/logs', async (req, res) => {
                 console.log(`[API DEBUG] Found ${allLines.length} non-empty lines`);
                 
                 const fileLines = allLines
-                    .slice(-lines)
                     .map(line => ({
                         timestamp: extractTimestamp(line),
                         level: extractLogLevel(line),
                         message: line,
                         file: logFile.name,
-                        device: deviceId
+                        device: deviceId,
+                        rawLine: line
                     }));
                 
                 console.log(`[API DEBUG] Processed ${fileLines.length} log entries`);
@@ -563,13 +526,20 @@ app.get('/api/devices/:deviceId/logs', async (req, res) => {
             }
         }
 
-        // Sort logs by timestamp (newest first)
-        logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        // Sort all logs by timestamp (newest first)
+        logs.sort((a, b) => {
+            const timeA = new Date(a.timestamp);
+            const timeB = new Date(b.timestamp);
+            return timeB - timeA; // Newest first
+        });
+
+        // Take the most recent entries
+        const recentLogs = logs.slice(0, lines);
 
         res.json({
             success: true,
-            data: logs.slice(0, lines),
-            count: logs.length,
+            data: recentLogs,
+            count: recentLogs.length,
             device: deviceId,
             timestamp: new Date()
         });
@@ -691,17 +661,46 @@ app.use((req, res) => {
 function extractTimestamp(logLine) {
     // Try to extract timestamp from common log formats
     const patterns = [
-        /^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/,  // MMM DD HH:mm:ss
-        /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/  // YYYY-MM-DD HH:mm:ss
+        /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})/,  // ISO format with timezone: 2025-11-13T20:18:29-05:00
+        /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z?)/,        // ISO format with milliseconds: 2025-11-13T20:18:29.123Z
+        /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/,                 // ISO format: 2025-11-13T20:18:29
+        /^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/,                // MMM DD HH:mm:ss at start
+        /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/,              // YYYY-MM-DD HH:mm:ss
+        /(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/,                 // MMM DD HH:mm:ss anywhere in line
     ];
     
     for (const pattern of patterns) {
         const match = logLine.match(pattern);
         if (match) {
-            return moment(match[1], ['MMM DD HH:mm:ss', 'YYYY-MM-DD HH:mm:ss']).toDate();
+            const timeStr = match[1];
+            
+            // Handle ISO format with timezone
+            if (timeStr.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}/)) {
+                return new Date(timeStr);
+            }
+            
+            // Handle ISO format with milliseconds
+            if (timeStr.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z?/)) {
+                return new Date(timeStr);
+            }
+            
+            // Handle ISO format without timezone
+            if (timeStr.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)) {
+                return new Date(timeStr);
+            }
+            
+            // Add current year if not present for syslog format
+            if (timeStr.match(/^\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}$/)) {
+                const currentYear = new Date().getFullYear();
+                return moment(`${currentYear} ${timeStr}`, 'YYYY MMM DD HH:mm:ss').toDate();
+            }
+            
+            // Handle standard date format
+            return moment(timeStr, 'YYYY-MM-DD HH:mm:ss').toDate();
         }
     }
     
+    console.log(`[DEBUG] Could not parse timestamp from: ${logLine.substring(0, 50)}...`);
     return new Date(); // Fallback to current time
 }
 
