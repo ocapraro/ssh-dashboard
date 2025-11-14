@@ -118,24 +118,18 @@
 
                         <div class="overview-card">
                             <div class="card-header">
-                                <h3>System Load</h3>
-                                <i class="fas fa-gauge-high"></i>
+                                <h3>Security Overview</h3>
+                                <i class="fas fa-shield-alt"></i>
                             </div>
                             <div class="card-content">
-                                <div class="load-meters">
-                                    <div class="meter">
-                                        <label>CPU</label>
-                                        <div class="progress-bar">
-                                            <div class="progress" id="cpu-usage" style="width: 0%"></div>
-                                        </div>
-                                        <span class="percentage" id="cpu-percentage">0%</span>
+                                <div class="security-stats">
+                                    <div class="security-item">
+                                        <span class="value" id="total-failed-logins">0</span>
+                                        <span class="label">Total Failed Logins</span>
                                     </div>
-                                    <div class="meter">
-                                        <label>Memory</label>
-                                        <div class="progress-bar">
-                                            <div class="progress" id="memory-usage" style="width: 0%"></div>
-                                        </div>
-                                        <span class="percentage" id="memory-percentage">0%</span>
+                                    <div class="security-item">
+                                        <span class="value" id="active-sessions-count">0</span>
+                                        <span class="label">Active Sessions</span>
                                     </div>
                                 </div>
                             </div>
@@ -143,12 +137,23 @@
 
                         <div class="overview-card">
                             <div class="card-header">
-                                <h3>Recent Alerts</h3>
-                                <i class="fas fa-exclamation-triangle"></i>
+                                <h3>Log Activity</h3>
+                                <i class="fas fa-file-alt"></i>
                             </div>
                             <div class="card-content">
-                                <div id="recent-alerts" class="alerts-list">
-                                    <!-- Alerts will be populated by JavaScript -->
+                                <div class="log-stats">
+                                    <div class="log-item">
+                                        <span class="value" id="total-errors">0</span>
+                                        <span class="label">Total Errors</span>
+                                    </div>
+                                    <div class="log-item">
+                                        <span class="value" id="total-warnings">0</span>
+                                        <span class="label">Total Warnings</span>
+                                    </div>
+                                    <div class="log-item">
+                                        <span class="value" id="devices-with-activity">0</span>
+                                        <span class="label">Devices with Activity</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -293,6 +298,9 @@
             <div class="modal-header">
                 <h3 id="logs-modal-title">Device Logs</h3>
                 <div class="logs-modal-actions">
+                    <select id="logs-file-selector" class="filter-select">
+                        <option value="all">All Log Files</option>
+                    </select>
                     <select id="logs-modal-filter" class="filter-select">
                         <option value="all">All Levels</option>
                         <option value="info">Info</option>
@@ -303,7 +311,7 @@
                 </div>
             </div>
             <div class="modal-body logs-modal-body">
-                <div class="logs-container" id="logs-modal-container">
+                <div class="logs-container scrollable" id="logs-modal-container">
                     <!-- Log entries will be populated by JavaScript -->
                 </div>
             </div>

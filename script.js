@@ -50,6 +50,7 @@ class SSHDashboard {
         const closeLogsModalBtn = document.getElementById('close-logs-modal-btn');
         const refreshLogsBtn = document.getElementById('refresh-logs-btn');
         const logsModalFilter = document.getElementById('logs-modal-filter');
+        const logsFileSelector = document.getElementById('logs-file-selector');
         
         if (logsModalClose) {
             logsModalClose.addEventListener('click', () => this.hideLogsModal());
@@ -62,6 +63,9 @@ class SSHDashboard {
         }
         if (logsModalFilter) {
             logsModalFilter.addEventListener('change', (e) => this.filterLogsModal(e.target.value));
+        }
+        if (logsFileSelector) {
+            logsFileSelector.addEventListener('change', (e) => this.loadDeviceLogFile(e.target.value));
         }
 
         // Search and filter
@@ -293,36 +297,31 @@ class SSHDashboard {
         document.getElementById('connections-today').textContent = totalConnections;
         document.getElementById('failed-attempts').textContent = totalFailedLogins;
 
-        // Remove fake CPU/Memory indicators or replace with real system stats if available
-        // For now, hide these sections
-        const cpuSection = document.getElementById('cpu-usage')?.parentElement;
-        const memorySection = document.getElementById('memory-usage')?.parentElement;
-        if (cpuSection) cpuSection.style.display = 'none';
-        if (memorySection) memorySection.style.display = 'none';
-
-        // Update recent alerts
-        this.renderRecentAlerts();
+        // Update new overview stats
+        document.getElementById('total-failed-logins').textContent = totalFailedLogins;
+        document.getElementById('active-sessions-count').textContent = totalActiveSessions;
+        
+        // Calculate total errors and warnings
+        let totalErrors = 0;
+        let totalWarnings = 0;
+        let devicesWithActivity = 0;
+        
+        this.devices.forEach(device => {
+            if (device.stats) {
+                totalErrors += device.stats.errorCount || 0;
+                totalWarnings += device.stats.warningCount || 0;
+                if ((device.stats.errorCount || 0) + (device.stats.warningCount || 0) + (device.stats.sshConnections || 0) > 0) {
+                    devicesWithActivity++;
+                }
+            }
+        });
+        
+        document.getElementById('total-errors').textContent = totalErrors;
+        document.getElementById('total-warnings').textContent = totalWarnings;
+        document.getElementById('devices-with-activity').textContent = devicesWithActivity;
     }
 
-    renderRecentAlerts() {
-        const container = document.getElementById('recent-alerts');
-        const recentAlerts = this.alerts.slice(0, 3);
 
-        if (recentAlerts.length === 0) {
-            container.innerHTML = '<div class="text-muted">No recent alerts</div>';
-            return;
-        }
-
-        container.innerHTML = recentAlerts.map(alert => `
-            <div class="alert-item">
-                <i class="fas fa-exclamation-triangle alert-icon"></i>
-                <div class="alert-content">
-                    <div class="alert-message">${alert.message}</div>
-                    <div class="alert-time">${this.formatTime(alert.time)}</div>
-                </div>
-            </div>
-        `).join('');
-    }
 
     renderDevices() {
         const container = document.getElementById('devices-grid');
@@ -472,11 +471,60 @@ class SSHDashboard {
             modalTitle.textContent = `${device.name} - Logs (${logs.length} entries)`;
         }
 
+        // Populate file selector
+        this.populateLogFileSelector(device);
+
         // Render logs in modal
         this.renderLogsInModal(logs);
 
         // Show the modal
         this.showLogsModal();
+    }
+
+    populateLogFileSelector(device) {
+        const selector = document.getElementById('logs-file-selector');
+        if (!selector || !device.logFiles) return;
+
+        // Clear existing options except "All Log Files"
+        selector.innerHTML = '<option value="all">All Log Files</option>';
+
+        // Add option for each log file
+        device.logFiles.forEach(logFile => {
+            const option = document.createElement('option');
+            option.value = logFile.name;
+            option.textContent = logFile.name;
+            selector.appendChild(option);
+        });
+    }
+
+    async loadDeviceLogFile(fileName) {
+        if (!this.currentDeviceForLogs) return;
+
+        try {
+            const deviceId = this.currentDeviceForLogs.id;
+            const url = fileName === 'all' 
+                ? `${this.apiBaseUrl}/devices/${encodeURIComponent(deviceId)}/logs?lines=100`
+                : `${this.apiBaseUrl}/devices/${encodeURIComponent(deviceId)}/logs?lines=100&file=${encodeURIComponent(fileName)}`;
+
+            const response = await fetch(url);
+            
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success && result.data) {
+                    this.currentDeviceLogs = result.data;
+                    this.renderLogsInModal(result.data);
+                    
+                    // Update title to show file name
+                    const modalTitle = document.getElementById('logs-modal-title');
+                    if (modalTitle) {
+                        const fileLabel = fileName === 'all' ? 'All Files' : fileName;
+                        modalTitle.textContent = `${this.currentDeviceForLogs.name} - ${fileLabel} (${result.data.length} entries)`;
+                    }
+                }
+            }
+        } catch (error) {
+            this.addLog('error', `Failed to load log file ${fileName}: ${error.message}`);
+        }
     }
 
     renderLogsInModal(logs) {

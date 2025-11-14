@@ -371,6 +371,47 @@ body {
     color: var(--primary-color);
 }
 
+.security-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.security-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.security-item .value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--danger-color);
+}
+
+.log-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.log-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+}
+
+.log-item .value {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--warning-color);
+}
+
+.log-item .label {
+    color: var(--text-secondary);
+}
+
 .load-meters {
     display: flex;
     flex-direction: column;
@@ -720,6 +761,29 @@ body {
     font-size: 0.8rem;
     line-height: 1.4;
     padding: 1rem;
+}
+
+.logs-container.scrollable {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) var(--bg-secondary);
+}
+
+.logs-container.scrollable::-webkit-scrollbar {
+    width: 8px;
+}
+
+.logs-container.scrollable::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+.logs-container.scrollable::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.logs-container.scrollable::-webkit-scrollbar-thumb:hover {
+    background: var(--border-hover);
 }
 
 .logs-modal-body .log-entry {
