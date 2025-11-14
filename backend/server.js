@@ -70,26 +70,39 @@ class DeviceScanner {
 
     async scanDevices() {
         this.isScanning = true;
+        console.log(`[SCAN DEBUG] Starting device scan in directory: ${this.logDirectory}`);
         logger.info('Starting device scan...');
         
         try {
             // Check if log directory exists
+            console.log(`[SCAN DEBUG] Checking if log directory exists: ${this.logDirectory}`);
             if (!await fs.pathExists(this.logDirectory)) {
+                console.log(`[SCAN DEBUG] Log directory does not exist, creating sample structure`);
                 logger.warn(`Log directory ${this.logDirectory} does not exist. Creating sample structure...`);
                 await this.createSampleLogStructure();
             }
 
             const devices = new Map();
+            console.log(`[SCAN DEBUG] Reading directory contents...`);
             const folders = await fs.readdir(this.logDirectory);
+            console.log(`[SCAN DEBUG] Found ${folders.length} items in log directory:`, folders);
 
             for (const folder of folders) {
+                console.log(`[SCAN DEBUG] Processing folder: ${folder}`);
                 const devicePath = path.join(this.logDirectory, folder);
+                console.log(`[SCAN DEBUG] Full path: ${devicePath}`);
+                
                 const stat = await fs.stat(devicePath);
+                console.log(`[SCAN DEBUG] ${folder} is ${stat.isDirectory() ? 'directory' : 'file'}`);
 
                 if (stat.isDirectory()) {
+                    console.log(`[SCAN DEBUG] Analyzing device in directory: ${folder}`);
                     const device = await this.analyzeDevice(folder, devicePath);
                     if (device) {
+                        console.log(`[SCAN DEBUG] Successfully analyzed device: ${device.id} with ${device.logFiles.length} log files`);
                         devices.set(device.id, device);
+                    } else {
+                        console.log(`[SCAN DEBUG] Failed to analyze device: ${folder}`);
                     }
                 }
             }
@@ -163,6 +176,9 @@ class DeviceScanner {
 
     async analyzeDeviceLogs(device) {
         try {
+            console.log(`[DEBUG] Starting log analysis for device: ${device.id}`);
+            console.log(`[DEBUG] Device has ${device.logFiles.length} log files`);
+            
             let totalLines = 0;
             let errorCount = 0;
             let warningCount = 0;
@@ -170,9 +186,18 @@ class DeviceScanner {
             let failedLogins = 0;
 
             for (const logFile of device.logFiles) {
+                console.log(`[DEBUG] Processing log file: ${logFile.path}`);
                 try {
+                    console.log(`[DEBUG] Checking file stats for: ${logFile.path}`);
+                    const stats = await fs.stat(logFile.path);
+                    console.log(`[DEBUG] File exists, size: ${stats.size} bytes`);
+                    
+                    console.log(`[DEBUG] Attempting to read file with UTF-8 encoding...`);
                     const content = await fs.readFile(logFile.path, 'utf8');
+                    console.log(`[DEBUG] Successfully read ${content.length} characters`);
+                    
                     const lines = content.split('\n');
+                    console.log(`[DEBUG] Split into ${lines.length} lines`);
                     totalLines += lines.length;
 
                     // Analyze each line
@@ -199,6 +224,8 @@ class DeviceScanner {
                         }
                     }
                 } catch (fileError) {
+                    console.log(`[ERROR] Failed to read log file ${logFile.path}:`, fileError);
+                    console.log(`[ERROR] Error code: ${fileError.code}, errno: ${fileError.errno}`);
                     logger.warn(`Could not read log file ${logFile.path}:`, fileError.message);
                 }
             }
@@ -423,33 +450,52 @@ app.get('/api/devices/:deviceId/logs', async (req, res) => {
         const { deviceId } = req.params;
         const { lines = 100, file } = req.query;
         
+        console.log(`[API DEBUG] Getting logs for device: ${deviceId}, lines: ${lines}, file: ${file}`);
+        
         const device = deviceCache.get(deviceId);
         if (!device) {
+            console.log(`[API ERROR] Device not found: ${deviceId}`);
             return res.status(404).json({
                 success: false,
                 error: 'Device not found'
             });
         }
 
+        console.log(`[API DEBUG] Device found: ${device.name}, has ${device.logFiles.length} log files`);
         let logs = [];
         const logFiles = file ? device.logFiles.filter(f => f.name === file) : device.logFiles;
+        console.log(`[API DEBUG] Processing ${logFiles.length} log files`);
 
         for (const logFile of logFiles) {
+            console.log(`[API DEBUG] Processing log file: ${logFile.name} at ${logFile.path}`);
             try {
+                console.log(`[API DEBUG] Attempting to read file...`);
                 const content = await fs.readFile(logFile.path, 'utf8');
-                const fileLines = content.split('\n')
-                    .filter(line => line.trim())
+                console.log(`[API DEBUG] Successfully read ${content.length} characters`);
+                
+                const allLines = content.split('\n').filter(line => line.trim());
+                console.log(`[API DEBUG] Found ${allLines.length} non-empty lines`);
+                
+                const fileLines = allLines
                     .slice(-lines)
                     .map(line => ({
-                        timestamp: this.extractTimestamp(line),
-                        level: this.extractLogLevel(line),
+                        timestamp: extractTimestamp(line),
+                        level: extractLogLevel(line),
                         message: line,
                         file: logFile.name,
                         device: deviceId
                     }));
                 
+                console.log(`[API DEBUG] Processed ${fileLines.length} log entries`);
                 logs.push(...fileLines);
             } catch (fileError) {
+                console.log(`[API ERROR] Failed to read log file ${logFile.path}:`, fileError);
+                console.log(`[API ERROR] Error details:`, {
+                    code: fileError.code,
+                    errno: fileError.errno,
+                    path: fileError.path,
+                    syscall: fileError.syscall
+                });
                 logger.warn(`Could not read log file ${logFile.path}:`, fileError.message);
             }
         }
