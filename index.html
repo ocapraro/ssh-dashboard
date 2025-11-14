@@ -64,9 +64,6 @@
                         <li><a href="#logs" class="nav-link" data-section="logs">
                             <i class="fas fa-file-alt"></i> Logs
                         </a></li>
-                        <li><a href="#settings" class="nav-link" data-section="settings">
-                            <i class="fas fa-cog"></i> Settings
-                        </a></li>
                     </ul>
                 </nav>
             </aside>
@@ -228,7 +225,7 @@
                 <!-- Logs Section -->
                 <section id="logs" class="content-section">
                     <div class="section-header">
-                        <h2>System Logs</h2>
+                        <h2 id="logs-title">System Logs</h2>
                         <div class="section-actions">
                             <select id="log-level" class="filter-select">
                                 <option value="all">All Levels</option>
@@ -236,6 +233,9 @@
                                 <option value="warning">Warning</option>
                                 <option value="error">Error</option>
                             </select>
+                            <button id="show-all-logs-btn" class="btn btn-secondary" style="display: none;">
+                                <i class="fas fa-list"></i> Show All Logs
+                            </button>
                             <button id="clear-logs-btn" class="btn btn-secondary">
                                 <i class="fas fa-trash"></i> Clear Logs
                             </button>
@@ -246,64 +246,7 @@
                     </div>
                 </section>
 
-                <!-- Settings Section -->
-                <section id="settings" class="content-section">
-                    <h2>Dashboard Settings</h2>
-                    <div class="settings-grid">
-                        <div class="settings-group">
-                            <h3>General Settings</h3>
-                            <div class="setting-item">
-                                <label for="refresh-interval">Auto Refresh Interval (seconds):</label>
-                                <input type="number" id="refresh-interval" value="30" min="5" max="300">
-                            </div>
-                            <div class="setting-item">
-                                <label for="max-logs">Maximum Log Entries:</label>
-                                <input type="number" id="max-logs" value="1000" min="100" max="10000">
-                            </div>
-                            <div class="setting-item">
-                                <label>
-                                    <input type="checkbox" id="auto-refresh" checked>
-                                    Enable Auto Refresh
-                                </label>
-                            </div>
-                        </div>
-                        <div class="settings-group">
-                            <h3>Notifications</h3>
-                            <div class="setting-item">
-                                <label>
-                                    <input type="checkbox" id="desktop-notifications" checked>
-                                    Desktop Notifications
-                                </label>
-                            </div>
-                            <div class="setting-item">
-                                <label>
-                                    <input type="checkbox" id="sound-alerts" checked>
-                                    Sound Alerts
-                                </label>
-                            </div>
-                            <div class="setting-item">
-                                <label>
-                                    <input type="checkbox" id="email-alerts">
-                                    Email Alerts
-                                </label>
-                            </div>
-                        </div>
-                        <div class="settings-group">
-                            <h3>Data Source</h3>
-                            <div class="setting-item">
-                                <label>
-                                    <input type="checkbox" id="use-real-api" checked>
-                                    Use Real Backend API
-                                </label>
-                                <small style="color: var(--text-secondary); font-size: 0.75rem;">Uncheck to use sample data when backend is unavailable</small>
-                            </div>
-                            <div class="setting-item">
-                                <label for="backend-url">Backend API URL:</label>
-                                <input type="text" id="backend-url" value="http://localhost:3001/api">
-                            </div>
-                        </div>
-                    </div>
-                </section>
+
             </div>
         </main>
     </div>

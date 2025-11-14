@@ -4,15 +4,13 @@ class SSHDashboard {
         this.devices = [];
         this.connections = [];
         this.logs = [];
+        this.systemLogs = [];
         this.alerts = [];
         this.apiBaseUrl = 'http://localhost:3001/api';
         this.settings = {
             autoRefresh: true,
             refreshInterval: 30,
             maxLogs: 1000,
-            desktopNotifications: true,
-            soundAlerts: true,
-            emailAlerts: false,
             useRealAPI: true // Toggle between real API and mock data
         };
         
@@ -51,28 +49,8 @@ class SSHDashboard {
         document.getElementById('device-search').addEventListener('input', (e) => this.filterDevices(e.target.value));
         document.getElementById('device-filter').addEventListener('change', (e) => this.filterDevicesByStatus(e.target.value));
 
-        // Settings
-        document.getElementById('auto-refresh').addEventListener('change', (e) => {
-            this.settings.autoRefresh = e.target.checked;
-            this.saveSettings();
-        });
-
-        document.getElementById('refresh-interval').addEventListener('change', (e) => {
-            this.settings.refreshInterval = parseInt(e.target.value);
-            this.saveSettings();
-            this.startAutoRefresh();
-        });
-
-        document.getElementById('use-real-api').addEventListener('change', (e) => {
-            this.settings.useRealAPI = e.target.checked;
-            this.saveSettings();
-            this.loadData(); // Reload data with new setting
-        });
-
-        document.getElementById('backend-url').addEventListener('change', (e) => {
-            this.apiBaseUrl = e.target.value;
-            this.saveSettings();
-        });
+        // Settings (simplified)
+        // Auto-refresh and API settings are now hardcoded for simplicity
 
         // Log controls
         document.getElementById('log-level').addEventListener('change', (e) => this.filterLogs(e.target.value));
@@ -399,42 +377,130 @@ class SSHDashboard {
     }
 
     async viewDeviceLogs(deviceId) {
+        const device = this.devices.find(d => d.id === deviceId);
+        if (!device) {
+            this.showNotification('Error', 'Device not found', 'error');
+            return;
+        }
+
+        this.addLog('info', `Loading logs for device: ${device.name}`);
+
         if (!this.settings.useRealAPI) {
-            this.showNotification('Feature Unavailable', 'Log viewing requires backend API', 'warning');
+            // Generate sample logs for the device
+            this.generateSampleDeviceLogs(device);
             return;
         }
 
         try {
-            const response = await fetch(`${this.apiBaseUrl}/devices/${deviceId}/logs?lines=50`);
+            this.showNotification('Loading', `Fetching logs for ${device.name}...`, 'info');
+            
+            const response = await fetch(`${this.apiBaseUrl}/devices/${encodeURIComponent(deviceId)}/logs?lines=50`);
             if (response.ok) {
                 const result = await response.json();
-                const device = this.devices.find(d => d.id === deviceId);
                 
-                // Display logs in a modal or switch to logs section
-                this.displayDeviceLogs(device, result.data);
+                if (result.success && result.data) {
+                    this.displayDeviceLogs(device, result.data);
+                } else {
+                    throw new Error('No log data received');
+                }
             } else {
-                throw new Error('Failed to fetch device logs');
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
         } catch (error) {
-            this.addLog('error', `Failed to load logs for device ${deviceId}: ${error.message}`);
-            this.showNotification('Error', 'Failed to load device logs', 'error');
+            this.addLog('error', `Failed to load logs for device ${device.name}: ${error.message}`);
+            this.showNotification('Error', `Failed to load logs: ${error.message}`, 'error');
+            
+            // Fallback to sample logs
+            this.generateSampleDeviceLogs(device);
         }
     }
 
+    generateSampleDeviceLogs(device) {
+        const sampleLogs = [
+            {
+                level: 'info',
+                message: `${device.name} sshd[1234]: Accepted publickey for admin from 192.168.1.100 port 52345 ssh2`,
+                timestamp: new Date(Date.now() - 300000)
+            },
+            {
+                level: 'warning',
+                message: `${device.name} sshd[1235]: Failed password for invalid user test from 203.0.113.42 port 45123 ssh2`,
+                timestamp: new Date(Date.now() - 600000)
+            },
+            {
+                level: 'info',
+                message: `${device.name} systemd[1]: Started Session c1 of user admin.`,
+                timestamp: new Date(Date.now() - 900000)
+            },
+            {
+                level: 'error',
+                message: `${device.name} kernel: Out of memory: Kill process 9876 (chrome) score 123`,
+                timestamp: new Date(Date.now() - 1200000)
+            },
+            {
+                level: 'info',
+                message: `${device.name} cron[5678]: (root) CMD (/usr/bin/backup-script.sh)`,
+                timestamp: new Date(Date.now() - 1500000)
+            }
+        ];
+
+        this.displayDeviceLogs(device, sampleLogs);
+    }
+
     displayDeviceLogs(device, logs) {
-        // For now, add logs to the main log viewer and switch to logs section
+        // Store current logs as system logs
+        this.systemLogs = this.logs.slice();
+        
+        // Clear existing logs and add device-specific logs
+        this.logs = [];
+        
         logs.forEach(log => {
             this.logs.unshift({
                 id: Date.now() + Math.random(),
                 level: log.level,
-                message: `[${device.name}] ${log.message}`,
+                message: log.message,
                 time: new Date(log.timestamp)
             });
         });
 
+        // Update logs section title and show "Show All Logs" button
+        const logsTitle = document.getElementById('logs-title');
+        const showAllBtn = document.getElementById('show-all-logs-btn');
+        
+        if (logsTitle) {
+            logsTitle.textContent = `${device.name} - Device Logs`;
+        }
+        
+        if (showAllBtn) {
+            showAllBtn.style.display = 'inline-flex';
+            showAllBtn.onclick = () => this.showAllLogs();
+        }
+
         // Switch to logs section
         this.showSection('logs');
         this.showNotification('Device Logs Loaded', `Loaded ${logs.length} log entries for ${device.name}`);
+    }
+
+    showAllLogs() {
+        // Restore system logs
+        if (this.systemLogs) {
+            this.logs = this.systemLogs.slice();
+        }
+        
+        // Update title and hide button
+        const logsTitle = document.getElementById('logs-title');
+        const showAllBtn = document.getElementById('show-all-logs-btn');
+        
+        if (logsTitle) {
+            logsTitle.textContent = 'System Logs';
+        }
+        
+        if (showAllBtn) {
+            showAllBtn.style.display = 'none';
+        }
+        
+        // Re-render logs
+        this.renderLogs();
     }
 
     renderConnections() {
@@ -743,43 +809,36 @@ class SSHDashboard {
     loadSettings() {
         const saved = localStorage.getItem('sshDashboardSettings');
         if (saved) {
-            this.settings = { ...this.settings, ...JSON.parse(saved) };
+            try {
+                this.settings = { ...this.settings, ...JSON.parse(saved) };
+            } catch (error) {
+                console.log('Could not load saved settings, using defaults');
+            }
         }
-        
-        // Apply settings to UI
-        document.getElementById('auto-refresh').checked = this.settings.autoRefresh;
-        document.getElementById('refresh-interval').value = this.settings.refreshInterval;
-        document.getElementById('max-logs').value = this.settings.maxLogs;
-        document.getElementById('desktop-notifications').checked = this.settings.desktopNotifications;
-        document.getElementById('sound-alerts').checked = this.settings.soundAlerts;
-        document.getElementById('email-alerts').checked = this.settings.emailAlerts;
-        document.getElementById('use-real-api').checked = this.settings.useRealAPI;
-        document.getElementById('backend-url').value = this.apiBaseUrl;
     }
 
     saveSettings() {
         localStorage.setItem('sshDashboardSettings', JSON.stringify(this.settings));
-        this.addLog('info', 'Settings saved');
+        this.addLog('info', 'Settings updated');
     }
 
     requestNotificationPermission() {
-        if ('Notification' in window && this.settings.desktopNotifications) {
+        if ('Notification' in window) {
             Notification.requestPermission();
         }
     }
 
     showNotification(title, message, type = 'info') {
-        // Desktop notification
-        if ('Notification' in window && Notification.permission === 'granted' && this.settings.desktopNotifications) {
+        // Desktop notification (always try to show if permission granted)
+        if ('Notification' in window && Notification.permission === 'granted') {
             new Notification(title, {
                 body: message,
                 icon: '/favicon.ico'
             });
         }
         
-        // Sound alert
-        if (this.settings.soundAlerts && type === 'error') {
-            // In a real implementation, you would play an audio file
+        // Sound alert for errors (console log for now)
+        if (type === 'error') {
             console.log('🔊 Alert sound would play here');
         }
         
@@ -797,6 +856,9 @@ class SSHDashboard {
             this.alerts = this.alerts.slice(0, 10);
             this.updateOverview();
         }
+        
+        // Console log for debugging
+        console.log(`${type.toUpperCase()}: ${title} - ${message}`);
     }
 
     formatTime(date) {
