@@ -736,9 +736,11 @@ body {
 .logs-modal-content {
     max-width: 900px;
     width: 95%;
+    height: 85vh;
     max-height: 85vh;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .logs-modal-actions {
@@ -751,42 +753,45 @@ body {
     flex: 1;
     overflow: hidden;
     padding: 0;
-    max-height: 70vh;
-    min-height: 400px;
+    display: flex;
+    flex-direction: column;
 }
 
 .logs-modal-body .logs-container {
-    height: 100%;
-    max-height: 100%;
-    overflow-y: scroll;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
     font-family: 'Monaco', 'Consolas', monospace;
     font-size: 0.8rem;
     line-height: 1.4;
     padding: 1rem;
-    box-sizing: border-box;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin: 0;
+}
+
+.logs-modal-body .logs-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.logs-modal-body .logs-container::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+    border-radius: 4px;
+}
+
+.logs-modal-body .logs-container::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+.logs-modal-body .logs-container::-webkit-scrollbar-thumb:hover {
+    background: var(--border-hover);
 }
 
 .logs-container.scrollable {
     scrollbar-width: thin;
     scrollbar-color: var(--border-color) var(--bg-secondary);
-}
-
-.logs-container.scrollable::-webkit-scrollbar {
-    width: 8px;
-}
-
-.logs-container.scrollable::-webkit-scrollbar-track {
-    background: var(--bg-secondary);
-    border-radius: 4px;
-}
-
-.logs-container.scrollable::-webkit-scrollbar-thumb {
-    background: var(--border-color);
-    border-radius: 4px;
-}
-
-.logs-container.scrollable::-webkit-scrollbar-thumb:hover {
-    background: var(--border-hover);
 }
 
 .logs-modal-body .log-entry {
