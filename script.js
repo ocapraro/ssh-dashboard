@@ -47,14 +47,44 @@ class SSHDashboard {
         document.querySelector('.modal-close').addEventListener('click', () => this.hideAddDeviceModal());
 
         // Logs modal actions
-        document.getElementById('logs-modal-close').addEventListener('click', () => this.hideLogsModal());
-        document.getElementById('close-logs-modal-btn').addEventListener('click', () => this.hideLogsModal());
-        document.getElementById('refresh-logs-btn').addEventListener('click', () => this.refreshCurrentDeviceLogs());
-        document.getElementById('logs-modal-filter').addEventListener('change', (e) => this.filterLogsModal(e.target.value));
+        const logsModalClose = document.getElementById('logs-modal-close');
+        const closeLogsModalBtn = document.getElementById('close-logs-modal-btn');
+        const refreshLogsBtn = document.getElementById('refresh-logs-btn');
+        const logsModalFilter = document.getElementById('logs-modal-filter');
+        
+        if (logsModalClose) {
+            logsModalClose.addEventListener('click', () => this.hideLogsModal());
+        }
+        if (closeLogsModalBtn) {
+            closeLogsModalBtn.addEventListener('click', () => this.hideLogsModal());
+        }
+        if (refreshLogsBtn) {
+            refreshLogsBtn.addEventListener('click', () => this.refreshCurrentDeviceLogs());
+        }
+        if (logsModalFilter) {
+            logsModalFilter.addEventListener('change', (e) => this.filterLogsModal(e.target.value));
+        }
 
         // Search and filter
         document.getElementById('device-search').addEventListener('input', (e) => this.filterDevices(e.target.value));
         document.getElementById('device-filter').addEventListener('change', (e) => this.filterDevicesByStatus(e.target.value));
+
+        // Device action buttons (using event delegation)
+        document.addEventListener('click', (e) => {
+            if (e.target.closest('.device-logs-btn')) {
+                const deviceId = e.target.closest('.device-logs-btn').getAttribute('data-device-id');
+                console.log('Logs button clicked for device:', deviceId);
+                this.viewDeviceLogs(deviceId);
+            } else if (e.target.closest('.device-connect-btn')) {
+                const deviceId = e.target.closest('.device-connect-btn').getAttribute('data-device-id');
+                console.log('Connect button clicked for device:', deviceId);
+                this.connectToDevice(deviceId);
+            } else if (e.target.closest('.device-ping-btn')) {
+                const deviceId = e.target.closest('.device-ping-btn').getAttribute('data-device-id');
+                console.log('Ping button clicked for device:', deviceId);
+                this.pingDevice(deviceId);
+            }
+        });
 
         // Settings (simplified)
         // Auto-refresh and API settings are now hardcoded for simplicity
@@ -70,11 +100,14 @@ class SSHDashboard {
             }
         });
 
-        document.getElementById('device-logs-modal').addEventListener('click', (e) => {
-            if (e.target.classList.contains('modal')) {
-                this.hideLogsModal();
-            }
-        });
+        const deviceLogsModal = document.getElementById('device-logs-modal');
+        if (deviceLogsModal) {
+            deviceLogsModal.addEventListener('click', (e) => {
+                if (e.target.classList.contains('modal')) {
+                    this.hideLogsModal();
+                }
+            });
+        }
     }
 
     showSection(sectionName) {
@@ -374,13 +407,13 @@ class SSHDashboard {
                     </div>
                     ` : ''}
                     <div class="device-actions">
-                        <button class="btn btn-sm btn-primary" onclick="dashboard.connectToDevice(${deviceId})" data-device-id="${device.id}">
+                        <button class="btn btn-sm btn-primary device-connect-btn" data-device-id="${device.id}">
                             <i class="fas fa-terminal"></i> Connect
                         </button>
-                        <button class="btn btn-sm btn-secondary" onclick="dashboard.viewDeviceLogs(${deviceId})" data-device-id="${device.id}">
+                        <button class="btn btn-sm btn-secondary device-logs-btn" data-device-id="${device.id}">
                             <i class="fas fa-file-alt"></i> Logs
                         </button>
-                        <button class="btn btn-sm btn-secondary" onclick="dashboard.pingDevice(${deviceId})" data-device-id="${device.id}">
+                        <button class="btn btn-sm btn-secondary device-ping-btn" data-device-id="${device.id}">
                             <i class="fas fa-heartbeat"></i> Ping
                         </button>
                     </div>
@@ -390,12 +423,17 @@ class SSHDashboard {
     }
 
     async viewDeviceLogs(deviceId) {
+        console.log('viewDeviceLogs called with deviceId:', deviceId);
+        console.log('Available devices:', this.devices.map(d => ({ id: d.id, name: d.name })));
+        
         const device = this.devices.find(d => d.id == deviceId || d.id === deviceId);
         if (!device) {
+            console.error('Device not found:', deviceId);
             this.addLog('error', `Device not found: ${deviceId}`);
             return;
         }
 
+        console.log('Found device:', device.name);
         this.addLog('info', `Loading logs for device: ${device.name}`);
 
         if (!this.settings.useRealAPI) {
@@ -604,7 +642,14 @@ class SSHDashboard {
     }
 
     showLogsModal() {
-        document.getElementById('device-logs-modal').classList.add('show');
+        const modal = document.getElementById('device-logs-modal');
+        console.log('showLogsModal called, modal element:', modal);
+        if (modal) {
+            modal.classList.add('show');
+            console.log('Modal should now be visible');
+        } else {
+            console.error('Modal element not found!');
+        }
     }
 
     hideLogsModal() {
@@ -936,7 +981,6 @@ class SSHDashboard {
 let dashboard;
 document.addEventListener('DOMContentLoaded', () => {
     dashboard = new SSHDashboard();
+    // Expose dashboard globally for onclick handlers
+    window.dashboard = dashboard;
 });
-
-// Expose dashboard globally for onclick handlers
-window.dashboard = dashboard;
