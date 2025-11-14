@@ -125,7 +125,6 @@ class DeviceScanner {
                 id: folderName,
                 name: this.formatDeviceName(folderName),
                 ip: this.extractIPFromName(folderName),
-                type: this.guessDeviceType(folderName),
                 status: 'unknown',
                 lastSeen: null,
                 logFiles: [],
@@ -136,7 +135,7 @@ class DeviceScanner {
                     sshConnections: 0,
                     failedLogins: 0
                 },
-                uptime: 'Unknown'
+                activeSessions: []
             };
 
             // Get log files in device directory
@@ -176,31 +175,23 @@ class DeviceScanner {
 
     async analyzeDeviceLogs(device) {
         try {
-            console.log(`[DEBUG] Starting log analysis for device: ${device.id}`);
-            console.log(`[DEBUG] Device has ${device.logFiles.length} log files`);
-            
             let totalLines = 0;
             let errorCount = 0;
             let warningCount = 0;
             let sshConnections = 0;
             let failedLogins = 0;
+            
+            // Track SSH sessions
+            const sessions = new Map(); // sessionId -> session info
+            const activeSessions = [];
 
             for (const logFile of device.logFiles) {
-                console.log(`[DEBUG] Processing log file: ${logFile.path}`);
                 try {
-                    console.log(`[DEBUG] Checking file stats for: ${logFile.path}`);
-                    const stats = await fs.stat(logFile.path);
-                    console.log(`[DEBUG] File exists, size: ${stats.size} bytes`);
-                    
-                    console.log(`[DEBUG] Attempting to read file with UTF-8 encoding...`);
                     const content = await fs.readFile(logFile.path, 'utf8');
-                    console.log(`[DEBUG] Successfully read ${content.length} characters`);
-                    
                     const lines = content.split('\n');
-                    console.log(`[DEBUG] Split into ${lines.length} lines`);
                     totalLines += lines.length;
 
-                    // Analyze each line
+                    // Analyze each line for sessions and stats
                     for (const line of lines.slice(-config.maxLogLines)) {
                         const lowerLine = line.toLowerCase();
                         
@@ -212,21 +203,59 @@ class DeviceScanner {
                             warningCount++;
                         }
                         
-                        // Count SSH connections
-                        if (lowerLine.includes('ssh') || lowerLine.includes('sshd')) {
-                            if (lowerLine.includes('accepted') || lowerLine.includes('opened')) {
-                                sshConnections++;
-                            }
-                            if (lowerLine.includes('failed') || lowerLine.includes('invalid') || 
-                                lowerLine.includes('authentication failure')) {
-                                failedLogins++;
+                        // Track SSH sessions
+                        if (lowerLine.includes('sshd')) {
+                            // Extract PID for session tracking
+                            const pidMatch = line.match(/sshd\[(\d+)\]/);
+                            const sessionId = pidMatch ? pidMatch[1] : null;
+                            
+                            if (sessionId) {
+                                // Session opened
+                                if (lowerLine.includes('accepted publickey') || lowerLine.includes('accepted password')) {
+                                    const userMatch = line.match(/for (\w+) from ([\d.]+)/);
+                                    if (userMatch) {
+                                        const [, username, sourceIP] = userMatch;
+                                        sessions.set(sessionId, {
+                                            id: sessionId,
+                                            username,
+                                            sourceIP,
+                                            startTime: this.extractTimestamp(line),
+                                            status: 'active',
+                                            device: device.id
+                                        });
+                                        sshConnections++;
+                                    }
+                                }
+                                
+                                // Session closed
+                                if (lowerLine.includes('session closed') || lowerLine.includes('connection closed')) {
+                                    if (sessions.has(sessionId)) {
+                                        const session = sessions.get(sessionId);
+                                        session.endTime = this.extractTimestamp(line);
+                                        session.status = 'closed';
+                                    }
+                                }
+                                
+                                // Failed login attempts
+                                if (lowerLine.includes('failed') || lowerLine.includes('invalid') || 
+                                    lowerLine.includes('authentication failure')) {
+                                    failedLogins++;
+                                }
                             }
                         }
                     }
                 } catch (fileError) {
-                    console.log(`[ERROR] Failed to read log file ${logFile.path}:`, fileError);
-                    console.log(`[ERROR] Error code: ${fileError.code}, errno: ${fileError.errno}`);
                     logger.warn(`Could not read log file ${logFile.path}:`, fileError.message);
+                }
+            }
+
+            // Filter for currently active sessions (no end time and recent start)
+            const now = new Date();
+            const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+            
+            for (const session of sessions.values()) {
+                if (session.status === 'active' && session.startTime > oneHourAgo) {
+                    activeSessions.push(session);
                 }
             }
 
@@ -237,6 +266,8 @@ class DeviceScanner {
                 sshConnections,
                 failedLogins
             };
+            
+            device.activeSessions = activeSessions;
 
         } catch (error) {
             logger.error(`Error analyzing logs for device ${device.id}:`, error);
@@ -257,15 +288,24 @@ class DeviceScanner {
         return match ? match[1] : `192.168.1.${Math.floor(Math.random() * 254) + 1}`;
     }
 
-    guessDeviceType(folderName) {
-        const name = folderName.toLowerCase();
-        if (name.includes('server') || name.includes('srv')) return 'server';
-        if (name.includes('router') || name.includes('rt')) return 'router';
-        if (name.includes('switch') || name.includes('sw')) return 'switch';
-        if (name.includes('firewall') || name.includes('fw')) return 'firewall';
-        if (name.includes('workstation') || name.includes('ws')) return 'workstation';
-        return 'server'; // Default
+    extractTimestamp(logLine) {
+        // Try to extract timestamp from common log formats
+        const patterns = [
+            /^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/,  // MMM DD HH:mm:ss
+            /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/  // YYYY-MM-DD HH:mm:ss
+        ];
+        
+        for (const pattern of patterns) {
+            const match = logLine.match(pattern);
+            if (match) {
+                return moment(match[1], ['MMM DD HH:mm:ss', 'YYYY-MM-DD HH:mm:ss']).toDate();
+            }
+        }
+        
+        return new Date(); // Fallback to current time
     }
+
+
 
     isLogFile(filename) {
         const ext = path.extname(filename).toLowerCase();
@@ -516,6 +556,35 @@ app.get('/api/devices/:deviceId/logs', async (req, res) => {
         res.status(500).json({
             success: false,
             error: 'Failed to fetch device logs',
+            message: error.message
+        });
+    }
+});
+
+// Get active sessions across all devices or for a specific device
+app.get('/api/sessions', async (req, res) => {
+    try {
+        const { deviceId } = req.query;
+        let allSessions = [];
+
+        for (const device of deviceCache.values()) {
+            if (!deviceId || device.id === deviceId) {
+                allSessions.push(...device.activeSessions);
+            }
+        }
+
+        res.json({
+            success: true,
+            data: allSessions,
+            count: allSessions.length,
+            timestamp: new Date()
+        });
+
+    } catch (error) {
+        logger.error('Error fetching active sessions:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch active sessions',
             message: error.message
         });
     }

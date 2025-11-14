@@ -2,9 +2,8 @@
 class SSHDashboard {
     constructor() {
         this.devices = [];
-        this.connections = [];
+        this.activeSessions = [];
         this.logs = [];
-        this.systemLogs = [];
         this.alerts = [];
         this.apiBaseUrl = 'http://localhost:3001/api';
         this.currentDeviceForLogs = null;
@@ -13,7 +12,7 @@ class SSHDashboard {
             autoRefresh: true,
             refreshInterval: 30,
             maxLogs: 1000,
-            useRealAPI: true // Toggle between real API and mock data
+            useRealAPI: true
         };
         
         this.init();
@@ -75,14 +74,6 @@ class SSHDashboard {
                 const deviceId = e.target.closest('.device-logs-btn').getAttribute('data-device-id');
                 console.log('Logs button clicked for device:', deviceId);
                 this.viewDeviceLogs(deviceId);
-            } else if (e.target.closest('.device-connect-btn')) {
-                const deviceId = e.target.closest('.device-connect-btn').getAttribute('data-device-id');
-                console.log('Connect button clicked for device:', deviceId);
-                this.connectToDevice(deviceId);
-            } else if (e.target.closest('.device-ping-btn')) {
-                const deviceId = e.target.closest('.device-ping-btn').getAttribute('data-device-id');
-                console.log('Ping button clicked for device:', deviceId);
-                this.pingDevice(deviceId);
             }
         });
 
@@ -125,7 +116,7 @@ class SSHDashboard {
                 this.renderDevices();
                 break;
             case 'connections':
-                this.renderConnections();
+                this.renderSessions();
                 break;
             case 'monitoring':
                 this.updateCharts();
@@ -151,21 +142,27 @@ class SSHDashboard {
     async loadRealData() {
         try {
             // Load devices from backend
-            const response = await fetch(`${this.apiBaseUrl}/devices`);
-            if (response.ok) {
-                const result = await response.json();
+            const devicesResponse = await fetch(`${this.apiBaseUrl}/devices`);
+            if (devicesResponse.ok) {
+                const result = await devicesResponse.json();
                 this.devices = result.data.map(device => ({
                     ...device,
-                    // Add default values for properties expected by frontend
-                    port: device.port || 22,
-                    cpu: Math.floor(Math.random() * 50) + 10, // Mock CPU data
-                    memory: Math.floor(Math.random() * 60) + 20 // Mock memory data
+                    port: device.port || 22
                 }));
                 
                 this.addLog('info', `Loaded ${this.devices.length} devices from backend`);
             } else {
-                throw new Error(`Backend not available (${response.status})`);
+                throw new Error(`Backend not available (${devicesResponse.status})`);
             }
+
+            // Load active sessions
+            const sessionsResponse = await fetch(`${this.apiBaseUrl}/sessions`);
+            if (sessionsResponse.ok) {
+                const sessionsResult = await sessionsResponse.json();
+                this.activeSessions = sessionsResult.data;
+                this.addLog('info', `Loaded ${this.activeSessions.length} active sessions`);
+            }
+
         } catch (error) {
             this.addLog('error', `Failed to connect to backend: ${error.message}`);
             this.showNotification('Backend Error', 'Using mock data - backend not available', 'warning');
@@ -173,37 +170,17 @@ class SSHDashboard {
             return;
         }
 
-        // Generate mock connections based on real devices
-        this.generateMockConnections();
-
         // Initialize alerts
         this.alerts = [];
         this.generateAlertsFromDevices();
 
         this.updateOverview();
         this.renderDevices();
-        this.renderConnections();
+        this.renderSessions();
         this.renderLogs();
     }
 
-    generateMockConnections() {
-        this.connections = [];
-        const onlineDevices = this.devices.filter(d => d.status === 'online');
-        
-        // Create mock SSH connections for online devices
-        onlineDevices.slice(0, 3).forEach((device, index) => {
-            this.connections.push({
-                id: index + 1,
-                deviceId: device.id,
-                deviceName: device.name,
-                user: ['admin', 'root', 'developer'][index] || 'admin',
-                ip: `192.168.1.${100 + index}`,
-                connectedSince: new Date(Date.now() - (Math.random() * 7200000)),
-                status: Math.random() > 0.3 ? 'active' : 'idle',
-                sessionId: `ssh-${Date.now()}-${index}`
-            });
-        });
-    }
+
 
     generateAlertsFromDevices() {
         this.devices.forEach(device => {
@@ -246,55 +223,49 @@ class SSHDashboard {
                 name: 'Web Server 01 (Sample)',
                 ip: '192.168.1.10',
                 port: 22,
-                type: 'server',
                 status: 'online',
                 lastSeen: new Date(),
-                cpu: 45,
-                memory: 78,
-                uptime: '15d 8h 32m',
-                stats: { errorCount: 5, warningCount: 2, sshConnections: 25, failedLogins: 1 }
+                stats: { errorCount: 5, warningCount: 2, sshConnections: 25, failedLogins: 1 },
+                activeSessions: [
+                    {
+                        id: '1234',
+                        username: 'admin',
+                        sourceIP: '192.168.1.100',
+                        startTime: new Date(Date.now() - 1800000),
+                        status: 'active',
+                        device: 'web-server-sample'
+                    }
+                ]
             },
             {
                 id: 'database-server-sample',
                 name: 'Database Server (Sample)',
                 ip: '192.168.1.15',
                 port: 22,
-                type: 'server',
                 status: 'online',
                 lastSeen: new Date(Date.now() - 300000),
-                cpu: 23,
-                memory: 65,
-                uptime: '32d 12h 15m',
-                stats: { errorCount: 2, warningCount: 1, sshConnections: 15, failedLogins: 0 }
+                stats: { errorCount: 2, warningCount: 1, sshConnections: 15, failedLogins: 0 },
+                activeSessions: []
             },
             {
                 id: 'main-router-sample',
                 name: 'Main Router (Sample)',
                 ip: '192.168.1.1',
                 port: 22,
-                type: 'router',
                 status: 'warning',
                 lastSeen: new Date(Date.now() - 900000),
-                cpu: 12,
-                memory: 34,
-                uptime: '45d 3h 22m',
-                stats: { errorCount: 8, warningCount: 5, sshConnections: 8, failedLogins: 2 }
+                stats: { errorCount: 8, warningCount: 5, sshConnections: 8, failedLogins: 2 },
+                activeSessions: []
             }
         ];
 
-        // Sample connections
-        this.connections = [
-            {
-                id: 1,
-                deviceId: 'web-server-sample',
-                deviceName: 'Web Server 01 (Sample)',
-                user: 'admin',
-                ip: '192.168.1.100',
-                connectedSince: new Date(Date.now() - 7200000),
-                status: 'active',
-                sessionId: 'ssh-001-sample'
+        // Collect all active sessions from devices
+        this.activeSessions = [];
+        this.devices.forEach(device => {
+            if (device.activeSessions) {
+                this.activeSessions.push(...device.activeSessions);
             }
-        ];
+        });
 
         // Sample logs
         this.addLog('info', 'SSH Dashboard started successfully');
@@ -323,28 +294,40 @@ class SSHDashboard {
         const onlineDevices = this.devices.filter(d => d.status === 'online').length;
         const offlineDevices = this.devices.filter(d => d.status === 'offline').length;
         const warningDevices = this.devices.filter(d => d.status === 'warning').length;
-        const activeConnections = this.connections.filter(c => c.status === 'active').length;
+        
+        // Calculate total active sessions and failed logins from devices
+        let totalActiveSessions = 0;
+        let totalFailedLogins = 0;
+        let totalConnections = 0;
+        
+        this.devices.forEach(device => {
+            if (device.activeSessions) {
+                totalActiveSessions += device.activeSessions.length;
+            }
+            if (device.stats) {
+                totalFailedLogins += device.stats.failedLogins || 0;
+                totalConnections += device.stats.sshConnections || 0;
+            }
+        });
 
         document.getElementById('total-devices').textContent = this.devices.length;
-        document.getElementById('active-connections').textContent = activeConnections;
+        document.getElementById('active-connections').textContent = totalActiveSessions;
         document.getElementById('alerts-count').textContent = this.alerts.length;
 
         document.getElementById('online-devices').textContent = onlineDevices;
         document.getElementById('offline-devices').textContent = offlineDevices;
         document.getElementById('warning-devices').textContent = warningDevices;
 
-        // Calculate today's connections (mock data)
-        document.getElementById('connections-today').textContent = Math.floor(Math.random() * 50) + 20;
-        document.getElementById('failed-attempts').textContent = Math.floor(Math.random() * 10) + 2;
+        // Use real data instead of mock data
+        document.getElementById('connections-today').textContent = totalConnections;
+        document.getElementById('failed-attempts').textContent = totalFailedLogins;
 
-        // Update system load (mock data)
-        const cpuUsage = Math.floor(Math.random() * 40) + 20;
-        const memoryUsage = Math.floor(Math.random() * 50) + 30;
-
-        document.getElementById('cpu-usage').style.width = `${cpuUsage}%`;
-        document.getElementById('cpu-percentage').textContent = `${cpuUsage}%`;
-        document.getElementById('memory-usage').style.width = `${memoryUsage}%`;
-        document.getElementById('memory-percentage').textContent = `${memoryUsage}%`;
+        // Remove fake CPU/Memory indicators or replace with real system stats if available
+        // For now, hide these sections
+        const cpuSection = document.getElementById('cpu-usage')?.parentElement;
+        const memorySection = document.getElementById('memory-usage')?.parentElement;
+        if (cpuSection) cpuSection.style.display = 'none';
+        if (memorySection) memorySection.style.display = 'none';
 
         // Update recent alerts
         this.renderRecentAlerts();
@@ -374,8 +357,8 @@ class SSHDashboard {
         const container = document.getElementById('devices-grid');
         
         container.innerHTML = this.devices.map(device => {
-            const deviceId = JSON.stringify(device.id); // Safely stringify for onclick
             const stats = device.stats || {};
+            const activeSessions = device.activeSessions || [];
             
             return `
                 <div class="device-card" data-device-id="${device.id}">
@@ -387,18 +370,12 @@ class SSHDashboard {
                         <div class="device-status ${device.status}">${device.status}</div>
                     </div>
                     <div class="device-details">
-                        <div>Type: ${device.type}</div>
                         <div>Last Seen: ${device.lastSeen ? this.formatTime(new Date(device.lastSeen)) : 'Never'}</div>
+                        <div>Active Sessions: ${activeSessions.length}</div>
                     </div>
-                    ${device.cpu !== undefined ? `
-                    <div class="device-details">
-                        <div>CPU: ${device.cpu}%</div>
-                        <div>Memory: ${device.memory}%</div>
-                    </div>
-                    ` : ''}
                     ${Object.keys(stats).length > 0 ? `
                     <div class="device-details">
-                        <div>SSH: ${stats.sshConnections || 0}</div>
+                        <div>SSH Connections: ${stats.sshConnections || 0}</div>
                         <div>Errors: ${stats.errorCount || 0}</div>
                     </div>
                     <div class="device-details">
@@ -407,14 +384,8 @@ class SSHDashboard {
                     </div>
                     ` : ''}
                     <div class="device-actions">
-                        <button class="btn btn-sm btn-primary device-connect-btn" data-device-id="${device.id}">
-                            <i class="fas fa-terminal"></i> Connect
-                        </button>
-                        <button class="btn btn-sm btn-secondary device-logs-btn" data-device-id="${device.id}">
-                            <i class="fas fa-file-alt"></i> Logs
-                        </button>
-                        <button class="btn btn-sm btn-secondary device-ping-btn" data-device-id="${device.id}">
-                            <i class="fas fa-heartbeat"></i> Ping
+                        <button class="btn btn-sm btn-primary device-logs-btn" data-device-id="${device.id}">
+                            <i class="fas fa-file-alt"></i> View Logs
                         </button>
                     </div>
                 </div>
@@ -593,23 +564,26 @@ class SSHDashboard {
         this.renderLogs();
     }
 
-    renderConnections() {
+    renderSessions() {
         const tbody = document.querySelector('#connections-table tbody');
         
-        tbody.innerHTML = this.connections.map(conn => `
-            <tr>
-                <td>${conn.deviceName}</td>
-                <td>${conn.user}</td>
-                <td>${conn.ip}</td>
-                <td>${this.formatTime(conn.connectedSince)}</td>
-                <td><span class="connection-status ${conn.status}">${conn.status}</span></td>
-                <td>
-                    <button class="btn btn-sm btn-danger" onclick="dashboard.killConnection(${conn.id})">
-                        <i class="fas fa-times"></i> Kill
-                    </button>
-                </td>
-            </tr>
-        `).join('');
+        if (!this.activeSessions || this.activeSessions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No active sessions</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = this.activeSessions.map(session => {
+            const deviceName = this.devices.find(d => d.id === session.device)?.name || session.device;
+            return `
+                <tr>
+                    <td>${deviceName}</td>
+                    <td>${session.username}</td>
+                    <td>${session.sourceIP}</td>
+                    <td>${this.formatTime(new Date(session.startTime))}</td>
+                    <td><span class="connection-status active">active</span></td>
+                </tr>
+            `;
+        }).join('');
     }
 
     renderLogs() {
@@ -683,60 +657,7 @@ class SSHDashboard {
         this.showNotification('Device Added', `${device.name} has been added to the dashboard`);
     }
 
-    connectToDevice(deviceId) {
-        const device = this.devices.find(d => d.id === deviceId);
-        if (!device) return;
 
-        this.addLog('info', `Attempting SSH connection to ${device.name} (${device.ip})`);
-        
-        // Simulate connection attempt
-        setTimeout(() => {
-            if (device.status === 'online') {
-                this.addLog('info', `SSH connection established to ${device.name}`);
-                this.showNotification('SSH Connected', `Connected to ${device.name}`);
-                
-                // Add mock connection
-                const newConnection = {
-                    id: this.connections.length + 1,
-                    deviceId: device.id,
-                    deviceName: device.name,
-                    user: 'admin',
-                    ip: '192.168.1.' + (100 + Math.floor(Math.random() * 50)),
-                    connectedSince: new Date(),
-                    status: 'active',
-                    sessionId: `ssh-${Date.now()}`
-                };
-                
-                this.connections.push(newConnection);
-                this.renderConnections();
-                this.updateOverview();
-            } else {
-                this.addLog('error', `Failed to connect to ${device.name} - device is ${device.status}`);
-                this.showNotification('Connection Failed', `Cannot connect to ${device.name}`, 'error');
-            }
-        }, 1000);
-    }
-
-    pingDevice(deviceId) {
-        const device = this.devices.find(d => d.id === deviceId);
-        if (!device) return;
-
-        this.addLog('info', `Pinging ${device.name} (${device.ip})`);
-        
-        // Simulate ping
-        setTimeout(() => {
-            const pingTime = Math.floor(Math.random() * 100) + 10;
-            this.addLog('info', `Ping to ${device.name}: ${pingTime}ms`);
-            
-            // Update device last seen
-            device.lastSeen = new Date();
-            if (device.status === 'offline') {
-                device.status = 'online';
-                this.renderDevices();
-                this.updateOverview();
-            }
-        }, 500);
-    }
 
     removeDevice(deviceId) {
         if (!confirm('Are you sure you want to remove this device?')) return;
@@ -747,29 +668,12 @@ class SSHDashboard {
         const device = this.devices[deviceIndex];
         this.devices.splice(deviceIndex, 1);
         
-        // Remove associated connections
-        this.connections = this.connections.filter(c => c.deviceId !== deviceId);
-        
         this.addLog('warning', `Removed device: ${device.name} (${device.ip})`);
         this.renderDevices();
-        this.renderConnections();
+        this.renderSessions();
         this.updateOverview();
         
         this.showNotification('Device Removed', `${device.name} has been removed from the dashboard`);
-    }
-
-    killConnection(connectionId) {
-        const connectionIndex = this.connections.findIndex(c => c.id === connectionId);
-        if (connectionIndex === -1) return;
-        
-        const connection = this.connections[connectionIndex];
-        this.connections.splice(connectionIndex, 1);
-        
-        this.addLog('warning', `Terminated SSH connection: ${connection.user}@${connection.ip} -> ${connection.deviceName}`);
-        this.renderConnections();
-        this.updateOverview();
-        
-        this.showNotification('Connection Terminated', `SSH session ${connection.sessionId} has been terminated`);
     }
 
     filterDevices(searchTerm) {
@@ -868,8 +772,6 @@ class SSHDashboard {
             // Simulate data refresh for sample data
             this.devices.forEach(device => {
                 if (device.status === 'online') {
-                    device.cpu = Math.max(0, Math.min(100, device.cpu + (Math.random() - 0.5) * 10));
-                    device.memory = Math.max(0, Math.min(100, device.memory + (Math.random() - 0.5) * 5));
                     device.lastSeen = new Date();
                 }
             });
