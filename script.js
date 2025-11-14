@@ -7,6 +7,8 @@ class SSHDashboard {
         this.systemLogs = [];
         this.alerts = [];
         this.apiBaseUrl = 'http://localhost:3001/api';
+        this.currentDeviceForLogs = null;
+        this.currentDeviceLogs = [];
         this.settings = {
             autoRefresh: true,
             refreshInterval: 30,
@@ -23,7 +25,6 @@ class SSHDashboard {
         this.bindEvents();
         this.initializeCharts();
         this.loadSettings();
-        this.requestNotificationPermission();
     }
 
     bindEvents() {
@@ -45,6 +46,12 @@ class SSHDashboard {
         document.getElementById('cancel-add-device').addEventListener('click', () => this.hideAddDeviceModal());
         document.querySelector('.modal-close').addEventListener('click', () => this.hideAddDeviceModal());
 
+        // Logs modal actions
+        document.getElementById('logs-modal-close').addEventListener('click', () => this.hideLogsModal());
+        document.getElementById('close-logs-modal-btn').addEventListener('click', () => this.hideLogsModal());
+        document.getElementById('refresh-logs-btn').addEventListener('click', () => this.refreshCurrentDeviceLogs());
+        document.getElementById('logs-modal-filter').addEventListener('change', (e) => this.filterLogsModal(e.target.value));
+
         // Search and filter
         document.getElementById('device-search').addEventListener('input', (e) => this.filterDevices(e.target.value));
         document.getElementById('device-filter').addEventListener('change', (e) => this.filterDevicesByStatus(e.target.value));
@@ -60,6 +67,12 @@ class SSHDashboard {
         document.getElementById('add-device-modal').addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
                 this.hideAddDeviceModal();
+            }
+        });
+
+        document.getElementById('device-logs-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                this.hideLogsModal();
             }
         });
     }
@@ -361,13 +374,13 @@ class SSHDashboard {
                     </div>
                     ` : ''}
                     <div class="device-actions">
-                        <button class="btn btn-sm btn-primary" onclick="dashboard.connectToDevice(${deviceId})">
+                        <button class="btn btn-sm btn-primary" onclick="dashboard.connectToDevice(${deviceId})" data-device-id="${device.id}">
                             <i class="fas fa-terminal"></i> Connect
                         </button>
-                        <button class="btn btn-sm btn-secondary" onclick="dashboard.viewDeviceLogs(${deviceId})">
+                        <button class="btn btn-sm btn-secondary" onclick="dashboard.viewDeviceLogs(${deviceId})" data-device-id="${device.id}">
                             <i class="fas fa-file-alt"></i> Logs
                         </button>
-                        <button class="btn btn-sm btn-secondary" onclick="dashboard.pingDevice(${deviceId})">
+                        <button class="btn btn-sm btn-secondary" onclick="dashboard.pingDevice(${deviceId})" data-device-id="${device.id}">
                             <i class="fas fa-heartbeat"></i> Ping
                         </button>
                     </div>
@@ -377,38 +390,36 @@ class SSHDashboard {
     }
 
     async viewDeviceLogs(deviceId) {
-        const device = this.devices.find(d => d.id === deviceId);
+        const device = this.devices.find(d => d.id == deviceId || d.id === deviceId);
         if (!device) {
-            this.showNotification('Error', 'Device not found', 'error');
+            this.addLog('error', `Device not found: ${deviceId}`);
             return;
         }
 
         this.addLog('info', `Loading logs for device: ${device.name}`);
 
         if (!this.settings.useRealAPI) {
-            // Generate sample logs for the device
             this.generateSampleDeviceLogs(device);
             return;
         }
 
         try {
-            this.showNotification('Loading', `Fetching logs for ${device.name}...`, 'info');
-            
             const response = await fetch(`${this.apiBaseUrl}/devices/${encodeURIComponent(deviceId)}/logs?lines=50`);
+            
             if (response.ok) {
                 const result = await response.json();
                 
                 if (result.success && result.data) {
                     this.displayDeviceLogs(device, result.data);
                 } else {
-                    throw new Error('No log data received');
+                    throw new Error('No log data received from API');
                 }
             } else {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
         } catch (error) {
             this.addLog('error', `Failed to load logs for device ${device.name}: ${error.message}`);
-            this.showNotification('Error', `Failed to load logs: ${error.message}`, 'error');
             
             // Fallback to sample logs
             this.generateSampleDeviceLogs(device);
@@ -416,78 +427,120 @@ class SSHDashboard {
     }
 
     generateSampleDeviceLogs(device) {
+        const now = Date.now();
+        const deviceHost = device.name.toLowerCase().replace(/\s+/g, '-');
+        
         const sampleLogs = [
             {
                 level: 'info',
-                message: `${device.name} sshd[1234]: Accepted publickey for admin from 192.168.1.100 port 52345 ssh2`,
-                timestamp: new Date(Date.now() - 300000)
+                message: `Nov 13 ${this.formatLogTime(now - 180000)} ${deviceHost} sshd[1234]: Accepted publickey for admin from 192.168.1.100 port 52345 ssh2`,
+                timestamp: new Date(now - 180000)
+            },
+            {
+                level: 'info',
+                message: `Nov 13 ${this.formatLogTime(now - 240000)} ${deviceHost} sshd[1234]: pam_unix(sshd:session): session opened for user admin`,
+                timestamp: new Date(now - 240000)
             },
             {
                 level: 'warning',
-                message: `${device.name} sshd[1235]: Failed password for invalid user test from 203.0.113.42 port 45123 ssh2`,
-                timestamp: new Date(Date.now() - 600000)
+                message: `Nov 13 ${this.formatLogTime(now - 300000)} ${deviceHost} sshd[1235]: Failed password for invalid user test from 203.0.113.42 port 45123 ssh2`,
+                timestamp: new Date(now - 300000)
             },
             {
                 level: 'info',
-                message: `${device.name} systemd[1]: Started Session c1 of user admin.`,
-                timestamp: new Date(Date.now() - 900000)
+                message: `Nov 13 ${this.formatLogTime(now - 420000)} ${deviceHost} systemd[1]: Started Session c1 of user admin.`,
+                timestamp: new Date(now - 420000)
+            },
+            {
+                level: 'info',
+                message: `Nov 13 ${this.formatLogTime(now - 600000)} ${deviceHost} cron[5678]: (root) CMD (/usr/bin/backup-script.sh)`,
+                timestamp: new Date(now - 600000)
             },
             {
                 level: 'error',
-                message: `${device.name} kernel: Out of memory: Kill process 9876 (chrome) score 123`,
-                timestamp: new Date(Date.now() - 1200000)
+                message: `Nov 13 ${this.formatLogTime(now - 780000)} ${deviceHost} kernel[0]: Out of memory: Kill process 9876 (chrome) score 123`,
+                timestamp: new Date(now - 780000)
+            },
+            {
+                level: 'warning',
+                message: `Nov 13 ${this.formatLogTime(now - 900000)} ${deviceHost} sshd[1240]: Authentication failure for user root from 10.0.0.1`,
+                timestamp: new Date(now - 900000)
             },
             {
                 level: 'info',
-                message: `${device.name} cron[5678]: (root) CMD (/usr/bin/backup-script.sh)`,
-                timestamp: new Date(Date.now() - 1500000)
+                message: `Nov 13 ${this.formatLogTime(now - 1080000)} ${deviceHost} systemd[1]: Started Update UTMP about System Runlevel Changes.`,
+                timestamp: new Date(now - 1080000)
             }
         ];
 
         this.displayDeviceLogs(device, sampleLogs);
     }
 
+    formatLogTime(timestamp) {
+        const date = new Date(timestamp);
+        return date.toTimeString().slice(0, 8); // HH:MM:SS format
+    }
+
     displayDeviceLogs(device, logs) {
-        // Store current logs as system logs
-        this.systemLogs = this.logs.slice();
+        // Store the current device and logs for refresh functionality
+        this.currentDeviceForLogs = device;
+        this.currentDeviceLogs = logs;
+
+        // Update modal title
+        const modalTitle = document.getElementById('logs-modal-title');
+        if (modalTitle) {
+            modalTitle.textContent = `${device.name} - Logs (${logs.length} entries)`;
+        }
+
+        // Render logs in modal
+        this.renderLogsInModal(logs);
+
+        // Show the modal
+        this.showLogsModal();
+    }
+
+    renderLogsInModal(logs) {
+        const container = document.getElementById('logs-modal-container');
         
-        // Clear existing logs and add device-specific logs
-        this.logs = [];
+        if (!logs || logs.length === 0) {
+            container.innerHTML = '<div class="log-entry"><span class="text-muted">No logs available</span></div>';
+            return;
+        }
+
+        container.innerHTML = logs.map(log => `
+            <div class="log-entry" data-level="${log.level || 'info'}">
+                <span class="log-time">${this.formatTime(new Date(log.timestamp || log.time))}</span>
+                <span class="log-level ${log.level || 'info'}">${(log.level || 'info').toUpperCase()}</span>
+                <span class="log-message">${log.message || 'No message'}</span>
+            </div>
+        `).join('');
+
+        // Scroll to top
+        container.scrollTop = 0;
+    }
+
+    filterLogsModal(level) {
+        const logEntries = document.querySelectorAll('#logs-modal-container .log-entry');
         
-        logs.forEach(log => {
-            this.logs.unshift({
-                id: Date.now() + Math.random(),
-                level: log.level,
-                message: log.message,
-                time: new Date(log.timestamp)
-            });
+        logEntries.forEach(entry => {
+            const entryLevel = entry.getAttribute('data-level');
+            if (level === 'all' || entryLevel === level) {
+                entry.style.display = 'flex';
+            } else {
+                entry.style.display = 'none';
+            }
         });
+    }
 
-        // Update logs section title and show "Show All Logs" button
-        const logsTitle = document.getElementById('logs-title');
-        const showAllBtn = document.getElementById('show-all-logs-btn');
-        
-        if (logsTitle) {
-            logsTitle.textContent = `${device.name} - Device Logs`;
+    refreshCurrentDeviceLogs() {
+        if (this.currentDeviceForLogs) {
+            this.viewDeviceLogs(this.currentDeviceForLogs.id);
         }
-        
-        if (showAllBtn) {
-            showAllBtn.style.display = 'inline-flex';
-            showAllBtn.onclick = () => this.showAllLogs();
-        }
-
-        // Switch to logs section
-        this.showSection('logs');
-        this.showNotification('Device Logs Loaded', `Loaded ${logs.length} log entries for ${device.name}`);
     }
 
     showAllLogs() {
-        // Restore system logs
-        if (this.systemLogs) {
-            this.logs = this.systemLogs.slice();
-        }
-        
-        // Update title and hide button
+        // This function is no longer needed since we're using modals
+        // But keeping it for compatibility
         const logsTitle = document.getElementById('logs-title');
         const showAllBtn = document.getElementById('show-all-logs-btn');
         
@@ -499,7 +552,6 @@ class SSHDashboard {
             showAllBtn.style.display = 'none';
         }
         
-        // Re-render logs
         this.renderLogs();
     }
 
@@ -549,6 +601,15 @@ class SSHDashboard {
     hideAddDeviceModal() {
         document.getElementById('add-device-modal').classList.remove('show');
         document.getElementById('add-device-form').reset();
+    }
+
+    showLogsModal() {
+        document.getElementById('device-logs-modal').classList.add('show');
+    }
+
+    hideLogsModal() {
+        document.getElementById('device-logs-modal').classList.remove('show');
+        this.currentDeviceForLogs = null;
     }
 
     handleAddDevice(e) {
@@ -822,25 +883,11 @@ class SSHDashboard {
         this.addLog('info', 'Settings updated');
     }
 
-    requestNotificationPermission() {
-        if ('Notification' in window) {
-            Notification.requestPermission();
-        }
-    }
+
 
     showNotification(title, message, type = 'info') {
-        // Desktop notification (always try to show if permission granted)
-        if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(title, {
-                body: message,
-                icon: '/favicon.ico'
-            });
-        }
-        
-        // Sound alert for errors (console log for now)
-        if (type === 'error') {
-            console.log('🔊 Alert sound would play here');
-        }
+        // Console log for debugging
+        console.log(`${type.toUpperCase()}: ${title} - ${message}`);
         
         // Add to alerts if it's a warning or error
         if (type === 'warning' || type === 'error') {
@@ -856,9 +903,6 @@ class SSHDashboard {
             this.alerts = this.alerts.slice(0, 10);
             this.updateOverview();
         }
-        
-        // Console log for debugging
-        console.log(`${type.toUpperCase()}: ${title} - ${message}`);
     }
 
     formatTime(date) {

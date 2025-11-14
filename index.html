@@ -292,6 +292,35 @@
         </div>
     </div>
 
+    <!-- Device Logs Modal -->
+    <div id="device-logs-modal" class="modal">
+        <div class="modal-content logs-modal-content">
+            <div class="modal-header">
+                <h3 id="logs-modal-title">Device Logs</h3>
+                <div class="logs-modal-actions">
+                    <select id="logs-modal-filter" class="filter-select">
+                        <option value="all">All Levels</option>
+                        <option value="info">Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="error">Error</option>
+                    </select>
+                    <button class="modal-close" id="logs-modal-close">&times;</button>
+                </div>
+            </div>
+            <div class="modal-body logs-modal-body">
+                <div class="logs-container" id="logs-modal-container">
+                    <!-- Log entries will be populated by JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="refresh-logs-btn">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+                <button class="btn btn-secondary" id="close-logs-modal-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>

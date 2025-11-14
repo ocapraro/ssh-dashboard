@@ -691,6 +691,90 @@ body {
     box-shadow: var(--shadow-lg);
 }
 
+/* Logs Modal Specific Styling */
+.logs-modal-content {
+    max-width: 900px;
+    width: 95%;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.logs-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.logs-modal-body {
+    flex: 1;
+    overflow: hidden;
+    padding: 0;
+    max-height: 60vh;
+}
+
+.logs-modal-body .logs-container {
+    max-height: 100%;
+    overflow-y: auto;
+    font-family: 'Monaco', 'Consolas', monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+    padding: 1rem;
+}
+
+.logs-modal-body .log-entry {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    gap: 0.75rem;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.logs-modal-body .log-entry:last-child {
+    border-bottom: none;
+}
+
+.logs-modal-body .log-time {
+    color: var(--text-secondary);
+    min-width: 120px;
+    font-size: 0.75rem;
+}
+
+.logs-modal-body .log-level {
+    min-width: 60px;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+.logs-modal-body .log-level.info {
+    color: var(--primary-color);
+}
+
+.logs-modal-body .log-level.warning {
+    color: var(--warning-color);
+}
+
+.logs-modal-body .log-level.error {
+    color: var(--danger-color);
+}
+
+.logs-modal-body .log-message {
+    flex: 1;
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    gap: 1rem;
+}
+
 .modal-header {
     display: flex;
     justify-content: space-between;
