@@ -219,42 +219,13 @@ class SSHDashboard {
         // Sample devices (fallback when backend is not available)
         this.devices = [
             {
-                id: 'web-server-sample',
-                name: 'Web Server 01 (Sample)',
-                ip: '192.168.1.10',
+                id: 'sample-device',
+                name: 'Sample Device (Backend Unavailable)',
+                ip: 'unknown',
                 port: 22,
-                status: 'online',
+                status: 'unknown',
                 lastSeen: new Date(),
-                stats: { errorCount: 5, warningCount: 2, sshConnections: 25, failedLogins: 1 },
-                activeSessions: [
-                    {
-                        id: '1234',
-                        username: 'admin',
-                        sourceIP: '192.168.1.100',
-                        startTime: new Date(Date.now() - 1800000),
-                        status: 'active',
-                        device: 'web-server-sample'
-                    }
-                ]
-            },
-            {
-                id: 'database-server-sample',
-                name: 'Database Server (Sample)',
-                ip: '192.168.1.15',
-                port: 22,
-                status: 'online',
-                lastSeen: new Date(Date.now() - 300000),
-                stats: { errorCount: 2, warningCount: 1, sshConnections: 15, failedLogins: 0 },
-                activeSessions: []
-            },
-            {
-                id: 'main-router-sample',
-                name: 'Main Router (Sample)',
-                ip: '192.168.1.1',
-                port: 22,
-                status: 'warning',
-                lastSeen: new Date(Date.now() - 900000),
-                stats: { errorCount: 8, warningCount: 5, sshConnections: 8, failedLogins: 2 },
+                stats: { errorCount: 0, warningCount: 0, sshConnections: 0, failedLogins: 0 },
                 activeSessions: []
             }
         ];
@@ -568,7 +539,7 @@ class SSHDashboard {
         const tbody = document.querySelector('#connections-table tbody');
         
         if (!this.activeSessions || this.activeSessions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">No active sessions</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">No active sessions</td></tr>';
             return;
         }
 
@@ -578,7 +549,8 @@ class SSHDashboard {
                 <tr>
                     <td>${deviceName}</td>
                     <td>${session.username}</td>
-                    <td>${session.sourceIP}</td>
+                    <td>${session.sourceIP}:${session.port || 'unknown'}</td>
+                    <td>${session.terminal || 'unknown'}</td>
                     <td>${this.formatTime(new Date(session.startTime))}</td>
                     <td><span class="connection-status active">active</span></td>
                 </tr>

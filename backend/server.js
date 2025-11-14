@@ -203,44 +203,47 @@ class DeviceScanner {
                             warningCount++;
                         }
                         
-                        // Track SSH sessions
-                        if (lowerLine.includes('sshd')) {
-                            // Extract PID for session tracking
-                            const pidMatch = line.match(/sshd\[(\d+)\]/);
-                            const sessionId = pidMatch ? pidMatch[1] : null;
+                        // Track SSH sessions from sshd-session.log
+                        if (logFile.name.includes('sshd-session')) {
+                            // Session started - "Starting session: shell on pts/1 for ocapraro from 192.168.66.1 port 62042"
+                            const sessionStartMatch = line.match(/Starting session: shell on (\S+) for (\w+) from ([\d.]+) port (\d+)/);
+                            if (sessionStartMatch) {
+                                const [, terminal, username, sourceIP, port] = sessionStartMatch;
+                                const sessionKey = `${username}@${sourceIP}:${port}`;
+                                
+                                sessions.set(sessionKey, {
+                                    id: sessionKey,
+                                    username,
+                                    sourceIP,
+                                    port: parseInt(port),
+                                    terminal,
+                                    startTime: this.extractTimestamp(line),
+                                    status: 'active',
+                                    device: device.id
+                                });
+                                sshConnections++;
+                            }
                             
-                            if (sessionId) {
-                                // Session opened
-                                if (lowerLine.includes('accepted publickey') || lowerLine.includes('accepted password')) {
-                                    const userMatch = line.match(/for (\w+) from ([\d.]+)/);
-                                    if (userMatch) {
-                                        const [, username, sourceIP] = userMatch;
-                                        sessions.set(sessionId, {
-                                            id: sessionId,
-                                            username,
-                                            sourceIP,
-                                            startTime: this.extractTimestamp(line),
-                                            status: 'active',
-                                            device: device.id
-                                        });
-                                        sshConnections++;
-                                    }
-                                }
+                            // Session ended - "Disconnected from user ocapraro 192.168.66.1 port 62042"
+                            const sessionEndMatch = line.match(/Disconnected from user (\w+) ([\d.]+) port (\d+)/);
+                            if (sessionEndMatch) {
+                                const [, username, sourceIP, port] = sessionEndMatch;
+                                const sessionKey = `${username}@${sourceIP}:${port}`;
                                 
-                                // Session closed
-                                if (lowerLine.includes('session closed') || lowerLine.includes('connection closed')) {
-                                    if (sessions.has(sessionId)) {
-                                        const session = sessions.get(sessionId);
-                                        session.endTime = this.extractTimestamp(line);
-                                        session.status = 'closed';
-                                    }
+                                if (sessions.has(sessionKey)) {
+                                    const session = sessions.get(sessionKey);
+                                    session.endTime = this.extractTimestamp(line);
+                                    session.status = 'closed';
                                 }
-                                
-                                // Failed login attempts
-                                if (lowerLine.includes('failed') || lowerLine.includes('invalid') || 
-                                    lowerLine.includes('authentication failure')) {
-                                    failedLogins++;
-                                }
+                            }
+                        }
+                        
+                        // Track other SSH events from auth.log or similar
+                        if (lowerLine.includes('sshd') && !logFile.name.includes('sshd-session')) {
+                            // Failed login attempts
+                            if (lowerLine.includes('failed') || lowerLine.includes('invalid') || 
+                                lowerLine.includes('authentication failure')) {
+                                failedLogins++;
                             }
                         }
                     }
@@ -249,12 +252,9 @@ class DeviceScanner {
                 }
             }
 
-            // Filter for currently active sessions (no end time and recent start)
-            const now = new Date();
-            const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-            
+            // Filter for currently active sessions (no end time)
             for (const session of sessions.values()) {
-                if (session.status === 'active' && session.startTime > oneHourAgo) {
+                if (session.status === 'active' && !session.endTime) {
                     activeSessions.push(session);
                 }
             }
@@ -285,7 +285,7 @@ class DeviceScanner {
         // Try to extract IP address from folder name
         const ipRegex = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/;
         const match = folderName.match(ipRegex);
-        return match ? match[1] : `192.168.1.${Math.floor(Math.random() * 254) + 1}`;
+        return match ? match[1] : 'unknown';
     }
 
     extractTimestamp(logLine) {
@@ -311,6 +311,7 @@ class DeviceScanner {
         const ext = path.extname(filename).toLowerCase();
         return ext === '.log' || 
                config.supportedLogFiles.some(logType => filename.includes(logType)) ||
+               filename.includes('sshd-session') ||
                filename.match(/\.(log|txt)$/i);
     }
 

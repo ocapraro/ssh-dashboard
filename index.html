@@ -177,12 +177,7 @@
                 <!-- SSH Connections Section -->
                 <section id="connections" class="content-section">
                     <div class="section-header">
-                        <h2>Active SSH Connections</h2>
-                        <div class="section-actions">
-                            <button id="kill-all-btn" class="btn btn-danger">
-                                <i class="fas fa-times-circle"></i> Kill All
-                            </button>
-                        </div>
+                        <h2>Active SSH Sessions</h2>
                     </div>
                     <div class="connections-table-container">
                         <table class="connections-table" id="connections-table">
@@ -190,10 +185,10 @@
                                 <tr>
                                     <th>Device</th>
                                     <th>User</th>
-                                    <th>IP Address</th>
+                                    <th>Source IP:Port</th>
+                                    <th>Terminal</th>
                                     <th>Connected Since</th>
                                     <th>Status</th>
-                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
