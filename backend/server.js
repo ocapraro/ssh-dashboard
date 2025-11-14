@@ -292,13 +292,21 @@ class DeviceScanner {
         // Try to extract timestamp from common log formats
         const patterns = [
             /^(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/,  // MMM DD HH:mm:ss
-            /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/  // YYYY-MM-DD HH:mm:ss
+            /^(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/,  // YYYY-MM-DD HH:mm:ss
+            /(\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/,    // MMM DD HH:mm:ss anywhere in line
+            /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/     // ISO format
         ];
         
         for (const pattern of patterns) {
             const match = logLine.match(pattern);
             if (match) {
-                return moment(match[1], ['MMM DD HH:mm:ss', 'YYYY-MM-DD HH:mm:ss']).toDate();
+                const timeStr = match[1];
+                // Add current year if not present for syslog format
+                if (timeStr.match(/^\w{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2}$/)) {
+                    const currentYear = new Date().getFullYear();
+                    return moment(`${currentYear} ${timeStr}`, 'YYYY MMM DD HH:mm:ss').toDate();
+                }
+                return moment(timeStr, ['YYYY-MM-DD HH:mm:ss', 'YYYY-MM-DDTHH:mm:ss']).toDate();
             }
         }
         

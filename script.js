@@ -22,7 +22,6 @@ class SSHDashboard {
 
     init() {
         this.bindEvents();
-        this.initializeCharts();
         this.loadSettings();
     }
 
@@ -121,9 +120,6 @@ class SSHDashboard {
                 break;
             case 'connections':
                 this.renderSessions();
-                break;
-            case 'monitoring':
-                this.updateCharts();
                 break;
             case 'logs':
                 this.renderLogs();
@@ -464,6 +460,7 @@ class SSHDashboard {
         // Store the current device and logs for refresh functionality
         this.currentDeviceForLogs = device;
         this.currentDeviceLogs = logs;
+        this.currentSelectedLogFile = 'all'; // Track current file selection
 
         // Update modal title
         const modalTitle = document.getElementById('logs-modal-title');
@@ -501,6 +498,9 @@ class SSHDashboard {
         if (!this.currentDeviceForLogs) return;
 
         try {
+            // Store current selection for refresh
+            this.currentSelectedLogFile = fileName;
+            
             const deviceId = this.currentDeviceForLogs.id;
             const url = fileName === 'all' 
                 ? `${this.apiBaseUrl}/devices/${encodeURIComponent(deviceId)}/logs?lines=100`
@@ -519,6 +519,12 @@ class SSHDashboard {
                     if (modalTitle) {
                         const fileLabel = fileName === 'all' ? 'All Files' : fileName;
                         modalTitle.textContent = `${this.currentDeviceForLogs.name} - ${fileLabel} (${result.data.length} entries)`;
+                    }
+                    
+                    // Update selector to show current selection
+                    const selector = document.getElementById('logs-file-selector');
+                    if (selector) {
+                        selector.value = fileName;
                     }
                 }
             }
@@ -562,7 +568,9 @@ class SSHDashboard {
 
     refreshCurrentDeviceLogs() {
         if (this.currentDeviceForLogs) {
-            this.viewDeviceLogs(this.currentDeviceForLogs.id);
+            // Maintain current file selection during refresh
+            const currentFile = this.currentSelectedLogFile || 'all';
+            this.loadDeviceLogFile(currentFile);
         }
     }
 
@@ -816,23 +824,9 @@ class SSHDashboard {
         }
     }
 
-    initializeCharts() {
-        // Placeholder for chart initialization
-        // In a real implementation, you would use a charting library like Chart.js
-        const networkChart = document.getElementById('network-chart');
-        const connectionChart = document.getElementById('connection-chart');
-        
-        if (networkChart && connectionChart) {
-            // Mock chart data display
-            networkChart.getContext('2d').fillText('Network Traffic Chart', 50, 100);
-            connectionChart.getContext('2d').fillText('Connection History Chart', 50, 100);
-        }
-    }
 
-    updateCharts() {
-        // Placeholder for chart updates
-        this.addLog('info', 'Charts updated');
-    }
+
+
 
     loadSettings() {
         const saved = localStorage.getItem('sshDashboardSettings');
